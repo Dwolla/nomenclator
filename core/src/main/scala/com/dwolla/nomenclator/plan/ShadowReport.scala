@@ -8,7 +8,10 @@ import com.dwolla.nomenclator.registration.Registration
   * registrator's entries included, so shadow mode can show what a cutover would
   * change. Matching is one-to-one: each agent service answers at most one
   * desired registration, preferring the one whose tags are identical, so tcp
-  * and udp on the same port don't both claim the same entry.
+  * and udp on the same port don't both claim the same entry. An unmatched agent
+  * service is reported as extra only if its ID has the shape registrator gave
+  * IDs, from any host: Consul's own service and hand-written registrations are
+  * neither registrator's nor Nomenclator's to replace.
   */
 object ShadowReport:
   def compare(desired: List[Registration], actual: AgentState): List[Difference] =
@@ -36,7 +39,9 @@ object ShadowReport:
                   .toList :: found
               )
           end match
-    differences.reverse.flatten ++ unmatched.map(Difference.Extra(_))
+    differences.reverse.flatten ++ unmatched
+      .filter(s => ServiceIds.isRegistratorShaped(s.id))
+      .map(Difference.Extra(_))
   end compare
 
   private def matches(r: Registration, s: AgentService): Boolean =

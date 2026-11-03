@@ -93,7 +93,9 @@ class ShadowReportSuite extends FunSuite:
           List(Difference.Missing(web), Difference.Extra(other))
         )
 
-  test("every unmatched agent service is Extra, owned or not"):
+  test(
+    "an unmatched agent service is Extra only if registrator could have registered it"
+  ):
     val owned = AgentService(
       ServiceId("ip-10-0-0-1:old:1"),
       ServiceName("old"),
@@ -103,9 +105,14 @@ class ShadowReportSuite extends FunSuite:
     )
     val consul =
       AgentService(ServiceId("consul"), ServiceName("consul"), Nil, "", 8300)
+    val handWritten =
+      AgentService(ServiceId("foo-service"), ServiceName("foo"), Nil, "", 80)
     assertEquals(
-      ShadowReport.compare(Nil, AgentState(List(owned, consul), Nil)),
-      List(Difference.Extra(owned), Difference.Extra(consul))
+      ShadowReport.compare(
+        Nil,
+        AgentState(List(owned, consul, registrators, handWritten), Nil)
+      ),
+      List(Difference.Extra(owned), Difference.Extra(registrators))
     )
 
   test("an agent that reports no definition judges the check by its presence"):
