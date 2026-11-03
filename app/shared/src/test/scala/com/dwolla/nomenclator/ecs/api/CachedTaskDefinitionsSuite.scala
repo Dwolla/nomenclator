@@ -1,6 +1,7 @@
 package com.dwolla.nomenclator.ecs.api
 
 import cats.effect.*
+import cats.effect.testkit.TestControl
 import cats.syntax.all.*
 import com.amazonaws.ecs.*
 import com.dwolla.nomenclator.ecs.TaskDefinitionRef
@@ -8,8 +9,11 @@ import com.dwolla.nomenclator.model.ContainerName
 import com.dwolla.nomenclator.settings.ContainerSettings
 import munit.CatsEffectSuite
 
+import scala.concurrent.duration.*
+
 class CachedTaskDefinitionsSuite extends CatsEffectSuite:
   private val ref = TaskDefinitionRef("foo-service", 7)
+  private val ignoreLookups: LookupResult => IO[Unit] = _ => IO.unit
 
   private def described(family: String) = DescribeTaskDefinitionResponse(
     taskDefinition = Some(
@@ -54,7 +58,7 @@ class CachedTaskDefinitionsSuite extends CatsEffectSuite:
   test("two lookups of one ref make one ECS call with family:revision"):
     for
       (requests, ecs) <- countingEcs(List(described("foo-service").pure[IO]))
-      defs <- CachedTaskDefinitions(ecs)
+      defs <- CachedTaskDefinitions(ecs, ignoreLookups)
       first <- defs.settings(ref)
       second <- defs.settings(ref)
       seen <- requests.get
@@ -75,7 +79,7 @@ class CachedTaskDefinitionsSuite extends CatsEffectSuite:
   test("different refs are cached separately"):
     for
       (requests, ecs) <- countingEcs(List(described("foo-service").pure[IO]))
-      defs <- CachedTaskDefinitions(ecs)
+      defs <- CachedTaskDefinitions(ecs, ignoreLookups)
       _ <- defs.settings(ref)
       _ <- defs.settings(ref.copy(revision = 8))
       seen <- requests.get
@@ -87,7 +91,7 @@ class CachedTaskDefinitionsSuite extends CatsEffectSuite:
       (requests, ecs) <- countingEcs(
         List(IO.raiseError(boom), described("foo-service").pure[IO])
       )
-      defs <- CachedTaskDefinitions(ecs)
+      defs <- CachedTaskDefinitions(ecs, ignoreLookups)
       failed <- defs.settings(ref).attempt
       recovered <- defs.settings(ref)
       again <- defs.settings(ref)
@@ -102,11 +106,42 @@ class CachedTaskDefinitionsSuite extends CatsEffectSuite:
       (requests, ecs) <- countingEcs(
         List(DescribeTaskDefinitionResponse().pure[IO])
       )
-      defs <- CachedTaskDefinitions(ecs)
+      defs <- CachedTaskDefinitions(ecs, ignoreLookups)
       failed <- defs.settings(ref).attempt
       _ <- defs.settings(ref).attempt
       seen <- requests.get
     yield
       assertEquals(failed, Left(TaskDefinitionMissing(ref)))
       assertEquals(seen.size, 2)
+
+  test("each lookup reports whether it was cached, fetched, or failed"):
+    for
+      (_, ecs) <- countingEcs(
+        List(
+          IO.raiseError(new RuntimeException("ecs unavailable")),
+          described("foo-service").pure[IO]
+        )
+      )
+      reported <- Ref.of[IO, Vector[LookupResult]](Vector.empty)
+      defs <- CachedTaskDefinitions(ecs, r => reported.update(_ :+ r))
+      _ <- defs.settings(ref).attempt
+      _ <- defs.settings(ref)
+      _ <- defs.settings(ref)
+      results <- reported.get
+    yield assertEquals(
+      results,
+      Vector(LookupResult.Failed, LookupResult.Fetched, LookupResult.Cached)
+    )
+
+  test("a cancelled lookup is reported as failed"):
+    val program = for
+      (_, ecs) <- countingEcs(List(IO.never))
+      reported <- Ref.of[IO, Vector[LookupResult]](Vector.empty)
+      defs <- CachedTaskDefinitions(ecs, r => reported.update(_ :+ r))
+      _ <- defs.settings(ref).timeout(5.seconds).attempt
+      results <- reported.get
+    yield results
+    TestControl
+      .executeEmbed(program)
+      .map(assertEquals(_, Vector(LookupResult.Failed)))
 end CachedTaskDefinitionsSuite

@@ -190,7 +190,7 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
       "task" -> s.task,
       "container" -> s.container.value,
       "port" -> s.port.value.value.toString,
-      "reason" -> reasonLabel(s.reason)
+      "reason" -> SkipReasonLabel.of(s.reason).value
     )
     s.reason match
       case SkipReason.Ignored =>
@@ -243,27 +243,17 @@ object ChangeLog:
   private def render(ref: TaskDefinitionRef): String =
     s"${ref.family}:${ref.revision}"
 
-  private def reasonLabel(reason: SkipReason): String = reason match
-    case SkipReason.Ignored            => "ignored"
-    case SkipReason.ScriptCheck        => "script_check"
-    case SkipReason.TtlCheck           => "ttl_check"
-    case SkipReason.NoHostPort         => "no_host_port"
-    case SkipReason.InvalidSettings(_) => "invalid_settings"
-
   private def describe(error: SettingsError): String = error match
     case SettingsError.InvalidDuration(key, value) =>
       s"$key '$value' is not a valid duration"
 
   private def differenceContext(d: Difference): Map[String, String] =
-    d match
-      case Difference.Missing(r) =>
-        Map("difference" -> "missing") ++ LogContext.of(r)
-      case Difference.Extra(s) =>
-        Map("difference" -> "extra") ++ LogContext.of(s)
+    Map("difference" -> DifferenceLabel.of(d).value) ++ (d match
+      case Difference.Missing(r)              => LogContext.of(r)
+      case Difference.Extra(s)                => LogContext.of(s)
       case Difference.Different(r, s, fields) =>
         Map(
-          "difference" -> "different",
           "fields" -> fields.toList.mkString(","),
           "agent_service_id" -> s.id.value
-        ) ++ LogContext.of(r)
+        ) ++ LogContext.of(r))
 end ChangeLog

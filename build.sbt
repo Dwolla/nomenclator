@@ -9,6 +9,13 @@ val http4sVersion = "0.23.38"
 val circeVersion = "0.14.17"
 val log4catsVersion = "2.8.0"
 val otel4sVersion = "1.1.0"
+val dwollaOtel4sVersion = "0.2.11"
+val otel4sTaglessVersion = "0.2.7"
+val otel4sSmithy4sVersion = "0.1.4"
+// The OpenTelemetry Java SDK's version, as dwolla-otel4s-oteljava resolves it.
+// Mixing versions on one classpath fails at runtime, so the testkit's SDK
+// testing module is pinned to it.
+val openTelemetryJavaVersion = "1.67.0"
 val testcontainersScalaVersion = "0.44.1"
 
 ThisBuild / organization := "com.dwolla"
@@ -74,11 +81,25 @@ lazy val app = crossProject(JVMPlatform)
       "org.http4s" %%% "http4s-circe" % http4sVersion,
       "org.typelevel" %%% "log4cats-core" % log4catsVersion,
       "org.typelevel" %%% "otel4s-core-trace" % otel4sVersion,
+      "org.typelevel" %%% "otel4s-core-metrics" % otel4sVersion,
+      "com.dwolla" %%% "otel4s-tagless" % otel4sTaglessVersion,
+      "com.dwolla" %%% "otel4s-tagless-metrics" % otel4sTaglessVersion,
+      "com.dwolla" %%% "otel4s-smithy4s" % otel4sSmithy4sVersion,
+      "com.dwolla" %%% "otel4s-smithy4s-metrics" % otel4sSmithy4sVersion,
       "io.circe" %%% "circe-literal" % circeVersion % Test,
       "org.typelevel" %%% "log4cats-testing" % log4catsVersion % Test
     ) ++ testDependencies.value,
     // smithy4s generates identifiers containing `$` (e.g. `$Unknown`), which Scala 3 warns about.
     scalacOptions += "-Wconf:src=.*/src_managed/.*:silent"
+  )
+  .jvmSettings(
+    libraryDependencies ++= Seq(
+      "com.dwolla" %% "dwolla-otel4s-oteljava" % dwollaOtel4sVersion,
+      "com.dwolla" %% "dwolla-otel4s-oteljava-aws-ecs" % dwollaOtel4sVersion,
+      "org.typelevel" %% "otel4s-instrumentation-metrics" % otel4sVersion,
+      "org.typelevel" %% "otel4s-oteljava-testkit" % otel4sVersion % Test,
+      "io.opentelemetry" % "opentelemetry-sdk-testing" % openTelemetryJavaVersion % Test
+    )
   )
 
 lazy val integration = project

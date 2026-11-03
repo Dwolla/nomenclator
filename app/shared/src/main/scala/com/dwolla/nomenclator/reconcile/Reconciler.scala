@@ -14,6 +14,7 @@ import com.dwolla.nomenclator.reconcile.ChangeLog.Dependency
 import com.dwolla.nomenclator.registration.*
 import fs2.Stream
 import org.typelevel.log4cats.StructuredLogger
+import org.typelevel.otel4s.Attribute
 import org.typelevel.otel4s.trace.Tracer
 
 import scala.concurrent.duration.FiniteDuration
@@ -89,15 +90,15 @@ object Reconciler:
                 else Stream.empty
               )
 
-  private final class Pass[F[_]: Temporal: StructuredLogger](
-                                                              mode: Mode,
-                                                              lookupTimeout: FiniteDuration,
-                                                              host: HostIdentity,
-                                                              globalTags: List[Tag],
-                                                              intro: EcsAgentIntrospection[F],
-                                                              defs: TaskDefinitions[F],
-                                                              consul: ConsulAgent[F],
-                                                              changeLog: ChangeLog[F]
+  private final class Pass[F[_]: Temporal: StructuredLogger: Tracer](
+                                                                      mode: Mode,
+                                                                      lookupTimeout: FiniteDuration,
+                                                                      host: HostIdentity,
+                                                                      globalTags: List[Tag],
+                                                                      intro: EcsAgentIntrospection[F],
+                                                                      defs: TaskDefinitions[F],
+                                                                      consul: ConsulAgent[F],
+                                                                      changeLog: ChangeLog[F]
   ):
 
     /** Fails, having written nothing, when the ECS agent or the Consul agent
@@ -122,6 +123,7 @@ object Reconciler:
         )
         planned = Planner.plan(host.name, desired.registrations, actual)
         plan = planned.copy(deregister = planned.deregister.filterNot(awaitingTaskOwns))
+        _ <- countsOnSpan(desired, actual, plan)
         outcome <- mode match
           case Mode.Apply =>
             applyPlan(plan, actual).map(
@@ -136,6 +138,28 @@ object Reconciler:
               .differences(differences)
               .as(PassOutcome(desired, actual, plan, differences, Nil))
       yield outcome
+
+    /** Puts the pass's counts on the current span, the pass's own. A replaced
+      * service, deregistered and registered again, is one planned change.
+      */
+    private def countsOnSpan(desired: Desired, actual: AgentState, plan: Plan): F[Unit] =
+      Tracer[F].withCurrentSpanOrNoop(
+        _.addAttributes(
+          Attribute(
+            "nomenclator.services.desired",
+            desired.registrations.size.toLong
+          ),
+          Attribute(
+            "nomenclator.services.registered",
+            actual.services.size.toLong
+          ),
+          Attribute(
+            "nomenclator.changes.planned",
+            (plan.register.map(_.id) ++ plan.deregister).distinct.size.toLong
+          ),
+          Attribute("nomenclator.services.skipped", desired.skipped.size.toLong)
+        )
+      )
 
     private def read[A](dependency: Dependency, fa: F[A]): F[A] =
       fa.attempt.flatTap(changeLog.dependency(dependency, _)).rethrow
