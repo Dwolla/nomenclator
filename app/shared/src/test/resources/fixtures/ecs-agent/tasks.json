@@ -13,6 +13,8 @@
           "Name": "web",
           "Image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/foo-service:1.2.3",
           "ImageID": "sha256:2ae34aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "CreatedAt": "2026-11-03T11:00:01.123456789Z",
+          "StartedAt": "2026-11-03T11:00:01.123456789Z",
           "Ports": [
             { "ContainerPort": 8080, "Protocol": "tcp", "HostPort": 32768 },
             { "ContainerPort": 8080, "Protocol": "tcp", "HostPort": 32768 }
@@ -33,6 +35,8 @@
           "Name": "worker",
           "Image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/bar-worker:4.5.6",
           "ImageID": "sha256:2ae34bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "CreatedAt": "2026-11-03T12:00:02.123456789Z",
+          "StartedAt": "2026-11-03T12:00:02.123456789Z",
           "Ports": [
             { "ContainerPort": 9000, "Protocol": "tcp", "HostPort": 32770 },
             { "ContainerPort": 9001, "Protocol": "udp", "HostPort": 32771 }
@@ -43,7 +47,12 @@
           "DockerName": "ecs-bar-worker-12-sidecar-1a2b3c4d5e6f7a8b9c0d",
           "Name": "sidecar",
           "Image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/bar-sidecar:latest",
-          "ImageID": "sha256:2ae34ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          "ImageID": "sha256:2ae34ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "CreatedAt": "2026-11-03T13:00:03.123456789Z",
+          "StartedAt": "2026-11-03T13:00:03.123456789Z",
+          "Volumes": [
+            { "DockerName": "ecs-bar-worker-12-data-volume", "Source": "/var/lib/ecs/data/bar-worker", "Destination": "/data" }
+          ]
         }
       ]
     },
@@ -60,6 +69,8 @@
           "Name": "web",
           "Image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/foo-service:1.2.2",
           "ImageID": "sha256:2ae34dddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "CreatedAt": "2026-11-03T14:00:04.123456789Z",
+          "StartedAt": "2026-11-03T14:00:04.123456789Z",
           "Ports": [
             { "ContainerPort": 8080, "Protocol": "tcp", "HostPort": 32769 }
           ]
@@ -79,6 +90,8 @@
           "Name": "api",
           "Image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/baz-api:7.0.0",
           "ImageID": "sha256:2ae34eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "CreatedAt": "2026-11-03T15:00:05.123456789Z",
+          "StartedAt": "2026-11-03T15:00:05.123456789Z",
           "Ports": [
             { "ContainerPort": 8080, "Protocol": "tcp", "HostPort": 8080 }
           ],
