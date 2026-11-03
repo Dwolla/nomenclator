@@ -1,0 +1,5 @@
+{
+  "Cluster": "example",
+  "ContainerInstanceArn": "arn:aws:ecs:us-east-1:123456789012:container-instance/example/0123456789abcdef0123456789abcdef",
+  "Version": "Amazon ECS Agent - v1.108.2 (abcdef01)"
+}
