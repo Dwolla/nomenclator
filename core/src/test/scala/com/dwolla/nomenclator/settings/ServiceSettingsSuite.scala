@@ -131,7 +131,7 @@ class ServiceSettingsSuite extends ScalaCheckSuite:
     assert(!settingsFor(443, env = env).ignored)
 
   test(
-    "a signed or zero-padded port prefix is port-specific but matches no port"
+    "a signed or zero-padded port prefix matches no port and sets nothing"
   ):
     val env = Map(
       "SERVICE_+80_NAME" -> "plus",
