@@ -155,7 +155,7 @@ class PlannerSuite extends ScalaCheckSuite:
       case (h, desired, state, reports) =>
         val applied =
           AgentSimulation(Planner.plan(h, desired, state), state, reports)
-        val ours = applied.services.filter(s => Ownership.owns(h, s.id))
+        val ours = applied.services.filter(s => ServiceIds.owns(h)(s.id))
         assertEquals(
           ours.map(_.id.value).sorted,
           desired.map(_.id.value).sorted
@@ -166,10 +166,10 @@ class PlannerSuite extends ScalaCheckSuite:
       case (h, desired, state, reports) =>
         val result = Planner.plan(h, desired, state)
         val applied = AgentSimulation(result, state, reports)
-        val foreign = state.services.filterNot(s => Ownership.owns(h, s.id))
-        assert(result.deregister.forall(Ownership.owns(h, _)))
+        val foreign = state.services.filterNot(s => ServiceIds.owns(h)(s.id))
+        assert(result.deregister.forall(ServiceIds.owns(h)(_)))
         assertEquals(
-          applied.services.filterNot(s => Ownership.owns(h, s.id)),
+          applied.services.filterNot(s => ServiceIds.owns(h)(s.id)),
           foreign
         )
         assertEquals(

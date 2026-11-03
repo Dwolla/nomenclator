@@ -4,7 +4,7 @@ import cats.Monad
 import cats.effect.*
 import cats.effect.syntax.all.*
 import cats.syntax.all.*
-import com.dwolla.nomenclator.consul.Ownership
+import com.dwolla.nomenclator.consul.ServiceIds
 import com.dwolla.nomenclator.ecs.api.LookupResult
 import com.dwolla.nomenclator.model.HostName
 import com.dwolla.nomenclator.reconcile.*
@@ -38,6 +38,7 @@ object NomenclatorMetrics:
     *   this host's name, which tells the services it owns from the others
     */
   def apply[F[_]: Monad: Ref.Make: Meter](host: HostName): Resource[F, NomenclatorMetrics[F]] =
+    val ownedByHost = ServiceIds.owns(host)
     for
       latest <- Ref.of[F, Option[(Mode, PassOutcome)]](None).toResource
       duration <- Meter[F]
@@ -83,7 +84,7 @@ object NomenclatorMetrics:
       ): (desired, registered, skipped, differences) =>
         latest.get.flatMap(_.traverse_ : (mode, outcome) =>
           val (owned, other) =
-            outcome.actual.services.partition(s => Ownership.owns(host, s.id))
+            outcome.actual.services.partition(s => ownedByHost(s.id))
           desired.record(outcome.desired.registrations.size.toLong) >>
             registered.record(owned.size.toLong, ownership("owned")) >>
             registered.record(other.size.toLong, ownership("other")) >>
@@ -129,6 +130,8 @@ object NomenclatorMetrics:
 
       override def taskDefinitionLookup(result: LookupResult): F[Unit] =
         lookups.inc(Attribute("nomenclator.lookup.result", lookupValue(result)))
+    end for
+  end apply
 
   /** Up to the pass timeout's default of 30 s, finest below a second, where
     * most passes finish.

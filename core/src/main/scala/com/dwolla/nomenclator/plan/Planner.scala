@@ -11,7 +11,8 @@ import com.dwolla.nomenclator.registration.Registration
   */
 object Planner:
   def plan(host: HostName, desired: List[Registration], actual: AgentState): Plan =
-    val ours = desired.filter(r => Ownership.owns(host, r.id))
+    val owned = ServiceIds.owns(host)
+    val ours = desired.filter(r => owned(r.id))
     val servicesById = actual.services.map(s => s.id -> s).toMap
     val checks = CheckComparison.registrationChecks(actual)
     val wanted = ours.map(_.id).toSet
@@ -30,7 +31,7 @@ object Planner:
       register.filter(r => r.check.isEmpty && checks.contains(r.id))
     val leftovers = actual.services
       .map(_.id)
-      .filter(id => Ownership.owns(host, id) && !wanted.contains(id))
+      .filter(id => owned(id) && !wanted.contains(id))
     val deregister = (leftovers ++ dropsCheck.map(_.id)).sortBy(_.value)
 
     Plan(register, deregister)

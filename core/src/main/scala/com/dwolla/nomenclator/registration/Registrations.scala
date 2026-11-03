@@ -1,6 +1,7 @@
 package com.dwolla.nomenclator.registration
 
 import cats.syntax.all.*
+import com.dwolla.nomenclator.consul.ServiceIds
 import com.dwolla.nomenclator.ecs.*
 import com.dwolla.nomenclator.model.*
 import com.dwolla.nomenclator.settings.*
@@ -96,7 +97,12 @@ object Registrations:
 
     def registration(check: Option[Check]) =
       Registration(
-        id = serviceId(host, container, binding),
+        id = ServiceIds.of(
+          host.name,
+          container.dockerName,
+          binding.containerPort,
+          binding.protocol
+        ),
         name = ServiceNaming.name(
           settings,
           container.image,
@@ -127,10 +133,4 @@ object Registrations:
         case Right(CheckSettings.Tcp(interval, timeout)) =>
           registration(Check.Tcp(target, interval, timeout).some).asRight
   end forPort
-
-  private def serviceId(host: HostIdentity, container: EcsContainer, binding: PortBinding): ServiceId =
-    val protocolSuffix = if (binding.protocol == Protocol.Udp) ":udp" else ""
-    ServiceId(
-      s"${host.name.value}:${container.dockerName.value}:${binding.containerPort.value.value}$protocolSuffix"
-    )
 end Registrations

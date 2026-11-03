@@ -1,7 +1,7 @@
 package com.dwolla.nomenclator.registration
 
 import cats.data.NonEmptyChain
-import com.dwolla.nomenclator.consul.Ownership
+import com.dwolla.nomenclator.consul.ServiceIds
 import com.dwolla.nomenclator.ecs.*
 import com.dwolla.nomenclator.gen.{EcsGen, ModelGen}
 import com.dwolla.nomenclator.model.*
@@ -372,7 +372,7 @@ class RegistrationsSuite extends ScalaCheckSuite:
 
   property("every desired id is owned by its host"):
     forAll(runningTasks): (hostName, tasks) =>
-      desiredFor(hostName, tasks).registrations.forall(r => Ownership.owns(hostName, r.id))
+      desiredFor(hostName, tasks).registrations.forall(r => ServiceIds.owns(hostName)(r.id))
 
   property("desired ids are distinct"):
     forAll(runningTasks): (hostName, tasks) =>

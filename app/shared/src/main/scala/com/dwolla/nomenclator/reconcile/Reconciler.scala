@@ -115,7 +115,7 @@ object Reconciler:
         _ <- changeLog.unowned(
           desired.registrations
             .map(_.id)
-            .filterNot(Ownership.owns(host.name, _))
+            .filterNot(ServiceIds.owns(host.name))
         )
         actual <- read(Dependency.Consul, consul.state)
         awaitingTaskOwns = ownedByAnyOf(
@@ -180,15 +180,13 @@ object Reconciler:
     /** Whether a service ID belongs to one of `tasks`' containers. A task
       * awaiting its definition produces no registrations, so without this the
       * planner would deregister what it registered earlier, and shadow mode
-      * would report it as extra. Its services' IDs start with this host's name
-      * and one of its containers' Docker names, which can't contain the `:`
-      * that separates them.
+      * would report it as extra.
       */
     private def ownedByAnyOf(tasks: List[EcsTask]): ServiceId => Boolean =
-      val prefixes = tasks
+      val belongs = tasks
         .flatMap(_.containers)
-        .map(c => s"${host.name.value}:${c.dockerName.value}:")
-      id => prefixes.exists(id.value.startsWith)
+        .map(c => ServiceIds.belongsTo(host.name, c.dockerName))
+      id => belongs.exists(_(id))
 
     /** Deregisters, then registers, as the [[com.dwolla.nomenclator.plan.Plan]]
       * contract requires. Every write is attempted whatever happened to the

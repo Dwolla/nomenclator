@@ -1,6 +1,6 @@
 package com.dwolla.nomenclator.plan
 
-import com.dwolla.nomenclator.consul.{AgentCheck, AgentState, CheckDefinition}
+import com.dwolla.nomenclator.consul.*
 import com.dwolla.nomenclator.model.ServiceId
 import com.dwolla.nomenclator.registration.Check
 import com.dwolla.nomenclator.settings.GoDuration
@@ -24,7 +24,7 @@ object CheckComparison:
   def registrationChecks(state: AgentState): Map[ServiceId, AgentCheck] =
     state.checks
       .flatMap: c =>
-        c.serviceId.filter(id => c.checkId == s"service:${id.value}").map(_ -> c)
+        c.serviceId.filter(id => c.checkId == ServiceIds.checkId(id)).map(_ -> c)
       .toMap
 
   /** True iff the registration's check on the agent is what the desired check

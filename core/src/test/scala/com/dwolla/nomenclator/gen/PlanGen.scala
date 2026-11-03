@@ -150,7 +150,7 @@ object PlanGen:
         ModelGen.identifier.map(i => s"${host.value}:$i")
       )
       .map(ServiceId(_))
-      .suchThat(id => !Ownership.owns(host, id))
+      .suchThat(id => !ServiceIds.owns(host)(id))
 
   private type Entry = (AgentService, List[AgentCheck])
 
