@@ -16,8 +16,9 @@ class RegistrationsSuite extends ScalaCheckSuite:
   private def ok[A](either: Either[String, A]): A =
     either.fold(fail(_), identity)
 
-  private val host = HostIdentity(ok(HostName.from("ip-10-0-0-1")), "10.0.0.1")
-  private val definition = TaskDefinitionRef("foo-service", 3)
+  private val host =
+    HostIdentity(ok(HostName.from("ip-10-0-0-1")), ServiceAddress("10.0.0.1"))
+  private val definition = TaskDefinitionRef(TaskFamily("foo-service"), 3)
   private val containerName = ContainerName("web")
   private val dockerName = DockerName("ecs-foo-service-3-web-a1b2")
   private val image =
@@ -37,7 +38,7 @@ class RegistrationsSuite extends ScalaCheckSuite:
                     image: ImageName = image
   ) =
     EcsTask(
-      "task-arn",
+      TaskArn("task-arn"),
       definition,
       known,
       desired,
@@ -67,7 +68,7 @@ class RegistrationsSuite extends ScalaCheckSuite:
           ServiceId("ip-10-0-0-1:ecs-foo-service-3-web-a1b2:8080"),
           ServiceName("foo-service"),
           Nil,
-          "10.0.0.1",
+          ServiceAddress("10.0.0.1"),
           ok(HostPort.from(32768)),
           None
         )
@@ -117,7 +118,14 @@ class RegistrationsSuite extends ScalaCheckSuite:
     )
     assertEquals(
       result.skipped,
-      List(Skipped("task-arn", containerName, port(9090), SkipReason.Ignored))
+      List(
+        Skipped(
+          TaskArn("task-arn"),
+          containerName,
+          port(9090),
+          SkipReason.Ignored
+        )
+      )
     )
 
   test("a udp port has a :udp id suffix and a trailing udp tag"):
@@ -177,7 +185,12 @@ class RegistrationsSuite extends ScalaCheckSuite:
     assertEquals(
       result.skipped,
       List(
-        Skipped("task-arn", containerName, port(8080), SkipReason.ScriptCheck)
+        Skipped(
+          TaskArn("task-arn"),
+          containerName,
+          port(8080),
+          SkipReason.ScriptCheck
+        )
       )
     )
 
@@ -259,7 +272,10 @@ class RegistrationsSuite extends ScalaCheckSuite:
         "ip-10-0-0-1:ecs-foo-service-3-web-a1b2:9090"
       )
     )
-    assertEquals(result.customIdRequested, List(("task-arn", containerName)))
+    assertEquals(
+      result.customIdRequested,
+      List(CustomIdRequest(TaskArn("task-arn"), containerName))
+    )
 
   test("an empty SERVICE_ID is not a custom ID request"):
     assertEquals(
@@ -322,7 +338,7 @@ class RegistrationsSuite extends ScalaCheckSuite:
     )
     forAll(ModelGen.hostName, publishingTask): (hostName, running) =>
       val result = Registrations.desired(
-        HostIdentity(hostName, "10.0.0.1"),
+        HostIdentity(hostName, ServiceAddress("10.0.0.1")),
         List(running),
         Map(running.definition -> Map.empty),
         Nil
@@ -362,7 +378,7 @@ class RegistrationsSuite extends ScalaCheckSuite:
 
   private def desiredFor(hostName: HostName, tasks: List[EcsTask]) =
     Registrations.desired(
-      HostIdentity(hostName, "10.0.0.1"),
+      HostIdentity(hostName, ServiceAddress("10.0.0.1")),
       tasks,
       tasks
         .map(_.definition -> Map.empty[ContainerName, ContainerSettings])

@@ -28,7 +28,7 @@ object ConsulCodecs:
           .when(r.tags.nonEmpty)(r.tags.map(_.value).asJson)
           .getOrElse(Json.Null),
         "Address" -> Option
-          .when(r.address.nonEmpty)(r.address.asJson)
+          .when(r.address.value.nonEmpty)(r.address.value.asJson)
           .getOrElse(Json.Null),
         "Port" -> Option
           .when(r.port.value.value != 0)(r.port.value.value.asJson)
@@ -59,7 +59,7 @@ object ConsulCodecs:
       c.get[String]("Service").map(ServiceName(_)),
       c.getOrElse[Option[List[String]]]("Tags")(None)
         .map(_.getOrElse(Nil).map(Tag(_))),
-      c.getOrElse[String]("Address")(""),
+      c.getOrElse[String]("Address")("").map(ServiceAddress(_)),
       c.getOrElse[Int]("Port")(0)
     ).mapN(AgentService.apply)
 
@@ -138,7 +138,7 @@ object ConsulCodecs:
 
   private val agentCheck: Decoder[AgentCheck] = Decoder.instance: c =>
     (
-      c.get[String]("CheckID"),
+      c.get[String]("CheckID").map(CheckId(_)),
       c.getOrElse[Option[String]]("ServiceID")(None)
         .map(nonEmpty(_).map(ServiceId(_))),
       reportedDefinition(c).asRight[DecodingFailure]
@@ -158,6 +158,8 @@ object ConsulCodecs:
     * under. Unlike `Config`, which agents omit unless debugging is enabled,
     * `Member` is always present.
     */
-  val memberAddress: Decoder[String] =
-    Decoder.instance(_.downField("Member").get[String]("Addr"))
+  val memberAddress: Decoder[ServiceAddress] =
+    Decoder.instance(
+      _.downField("Member").get[String]("Addr").map(ServiceAddress(_))
+    )
 end ConsulCodecs

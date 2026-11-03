@@ -14,7 +14,7 @@ class ConsulCodecsSuite extends FunSuite:
     ServiceId("ip-10-0-0-1:ecs-foo-service-3-web-a1b2:8080"),
     ServiceName("foo-service"),
     Nil,
-    "10.0.0.1",
+    ServiceAddress("10.0.0.1"),
     HostPort.from(32768).fold(fail(_), identity),
     Some(Check.Http("http://10.0.0.1:32768/health", 5.seconds, Some(1.second)))
   )
@@ -55,7 +55,7 @@ class ConsulCodecsSuite extends FunSuite:
 
   test("an empty address, a zero port, and no check are omitted"):
     val r = httpRegistration.copy(
-      address = "",
+      address = ServiceAddress(""),
       port = HostPort.from(0).fold(fail(_), identity),
       check = None
     )
@@ -75,7 +75,7 @@ class ConsulCodecsSuite extends FunSuite:
           ServiceId("h:web:80"),
           ServiceName("web"),
           List(Tag("a")),
-          "10.0.0.1",
+          ServiceAddress("10.0.0.1"),
           80
         )
       )
@@ -97,7 +97,7 @@ class ConsulCodecsSuite extends FunSuite:
       checks,
       List(
         AgentCheck(
-          "service:h:web:80",
+          CheckId("service:h:web:80"),
           Some(ServiceId("h:web:80")),
           Some(
             CheckDefinition(
@@ -122,7 +122,7 @@ class ConsulCodecsSuite extends FunSuite:
         "Type":"tcp","Interval":"7s","Timeout":"2s","Definition":{}}
     }""")
     assertEquals(
-      checks.sortBy(_.checkId).map(_.definition),
+      checks.sortBy(_.checkId.value).map(_.definition),
       List(
         Some(CheckDefinition(Some("tcp"), None, None, Some("7s"), Some("2s"))),
         Some(CheckDefinition(Some("http"), None, None, Some("1m30s"), None))
@@ -190,6 +190,6 @@ class ConsulCodecsSuite extends FunSuite:
     assertEquals(
       json"""{"Config":{"Datacenter":"dc1"},"Member":{"Name":"n","Addr":"10.9.8.7"}}"""
         .as(using ConsulCodecs.memberAddress),
-      Right("10.9.8.7")
+      Right(ServiceAddress("10.9.8.7"))
     )
 end ConsulCodecsSuite

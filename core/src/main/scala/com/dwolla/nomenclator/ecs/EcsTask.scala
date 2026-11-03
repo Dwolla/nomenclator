@@ -1,7 +1,9 @@
 package com.dwolla.nomenclator.ecs
 
+import com.dwolla.nomenclator.model.TaskArn
+
 final case class EcsTask(
-                          arn: String,
+                          arn: TaskArn,
                           definition: TaskDefinitionRef,
                           knownStatus: TaskStatus,
                           desiredStatus: TaskStatus,

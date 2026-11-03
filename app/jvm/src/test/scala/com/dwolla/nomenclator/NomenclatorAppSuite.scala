@@ -30,11 +30,12 @@ class NomenclatorAppSuite extends CatsEffectSuite:
     either.fold(fail(_), identity)
 
   private val token = "s3cret-token-value"
-  private val host = HostIdentity(ok(HostName.from("test-host")), "10.0.0.1")
-  private val fooRef = TaskDefinitionRef("foo-service", 1)
+  private val host =
+    HostIdentity(ok(HostName.from("test-host")), ServiceAddress("10.0.0.1"))
+  private val fooRef = TaskDefinitionRef(TaskFamily("foo-service"), 1)
 
   private val foo = EcsTask(
-    "arn:aws:ecs:us-east-1:123456789012:task/example/foo",
+    TaskArn("arn:aws:ecs:us-east-1:123456789012:task/example/foo"),
     fooRef,
     TaskStatus.Running,
     TaskStatus.Running,

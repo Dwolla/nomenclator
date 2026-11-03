@@ -15,7 +15,7 @@ class ShadowReportSuite extends FunSuite:
     ServiceId("ip-10-0-0-1:web:8080"),
     ServiceName("web"),
     List(Tag("a")),
-    "10.0.0.1",
+    ServiceAddress("10.0.0.1"),
     HostPort.from(8080).fold(fail(_), identity),
     Some(tcp)
   )
@@ -26,7 +26,7 @@ class ShadowReportSuite extends FunSuite:
     ServiceId("abc123:web:8080"),
     ServiceName("web"),
     List(Tag("a"), Tag("Version-x")),
-    "10.0.0.1",
+    ServiceAddress("10.0.0.1"),
     8080
   )
 
@@ -84,7 +84,7 @@ class ShadowReportSuite extends FunSuite:
     val s = registrators.copy(tags = web.tags)
     List(
       s.copy(port = 1),
-      s.copy(address = "x"),
+      s.copy(address = ServiceAddress("x")),
       s.copy(name = ServiceName("y"))
     )
       .foreach: other =>
@@ -100,13 +100,25 @@ class ShadowReportSuite extends FunSuite:
       ServiceId("ip-10-0-0-1:old:1"),
       ServiceName("old"),
       Nil,
-      "10.0.0.1",
+      ServiceAddress("10.0.0.1"),
       1
     )
     val consul =
-      AgentService(ServiceId("consul"), ServiceName("consul"), Nil, "", 8300)
+      AgentService(
+        ServiceId("consul"),
+        ServiceName("consul"),
+        Nil,
+        ServiceAddress(""),
+        8300
+      )
     val handWritten =
-      AgentService(ServiceId("foo-service"), ServiceName("foo"), Nil, "", 80)
+      AgentService(
+        ServiceId("foo-service"),
+        ServiceName("foo"),
+        Nil,
+        ServiceAddress(""),
+        80
+      )
     assertEquals(
       ShadowReport.compare(
         Nil,

@@ -8,7 +8,7 @@ import com.dwolla.nomenclator.consul.AgentState
 import com.dwolla.nomenclator.consul.agent.{ConsulAgent, ConsulCodecs}
 import com.dwolla.nomenclator.ecs.agent.EcsAgentIntrospection
 import com.dwolla.nomenclator.ecs.{EcsTask, InstanceMetadata}
-import com.dwolla.nomenclator.model.ServiceId
+import com.dwolla.nomenclator.model.{ServiceAddress, ServiceId}
 import com.dwolla.nomenclator.registration.Registration
 import com.dwolla.tracing.otel4s.ToAnyValue
 import org.typelevel.otel4s.AnyValue
@@ -31,7 +31,7 @@ object AlgebraAspects:
         private def call[A](method: String, result: F[A])(inputs: Advice[Eval, ToAnyValue]*) =
           woven("ConsulAgent", method, result, inputs*)
 
-        override def advertisedAddress: Weave[F, ToAnyValue, Trivial, String] =
+        override def advertisedAddress: Weave[F, ToAnyValue, Trivial, ServiceAddress] =
           call("advertisedAddress", af.advertisedAddress)()
 
         override def state: Weave[F, ToAnyValue, Trivial, AgentState] =
@@ -44,7 +44,8 @@ object AlgebraAspects:
           call("deregister", af.deregister(id))(Advice.byValue("id", id))
 
       override def mapK[F[_], G[_]](af: ConsulAgent[F])(fk: F ~> G): ConsulAgent[G] = new ConsulAgent[G]:
-        override def advertisedAddress: G[String] = fk(af.advertisedAddress)
+        override def advertisedAddress: G[ServiceAddress] =
+          fk(af.advertisedAddress)
         override def state: G[AgentState] = fk(af.state)
         override def register(r: Registration): G[Unit] = fk(af.register(r))
         override def deregister(id: ServiceId): G[Unit] =

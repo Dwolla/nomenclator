@@ -5,14 +5,14 @@ import cats.effect.testkit.TestControl
 import cats.syntax.all.*
 import com.amazonaws.ecs.*
 import com.dwolla.nomenclator.ecs.TaskDefinitionRef
-import com.dwolla.nomenclator.model.ContainerName
+import com.dwolla.nomenclator.model.{ContainerName, TaskFamily}
 import com.dwolla.nomenclator.settings.ContainerSettings
 import munit.CatsEffectSuite
 
 import scala.concurrent.duration.*
 
 class CachedTaskDefinitionsSuite extends CatsEffectSuite:
-  private val ref = TaskDefinitionRef("foo-service", 7)
+  private val ref = TaskDefinitionRef(TaskFamily("foo-service"), 7)
   private val ignoreLookups: LookupResult => IO[Unit] = _ => IO.unit
 
   private def described(family: String) = DescribeTaskDefinitionResponse(

@@ -43,9 +43,7 @@ object CachedTaskDefinitions:
 
           private def describe(ref: TaskDefinitionRef): F[Map[ContainerName, ContainerSettings]] =
             for
-              response <- ecs.describeTaskDefinition(
-                s"${ref.family}:${ref.revision}"
-              )
+              response <- ecs.describeTaskDefinition(ref.value)
               _ <- TaskDefinitionMissing(ref)
                 .raiseError[F, Unit]
                 .whenA(response.taskDefinition.isEmpty)

@@ -113,9 +113,9 @@ object IntrospectionCodecs:
 
   private val task: Decoder[EcsTask] = Decoder.instance: c =>
     (
-      c.get[String]("Arn"),
+      c.get[String]("Arn").map(TaskArn(_)),
       (
-        c.get[String]("Family"),
+        c.get[String]("Family").map(TaskFamily(_)),
         c.get[Int]("Version")(using revision)
       ).mapN(TaskDefinitionRef.apply),
       c.get[TaskStatus]("KnownStatus")(using status),

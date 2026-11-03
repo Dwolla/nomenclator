@@ -5,7 +5,7 @@ import cats.effect.*
 import cats.syntax.all.*
 import com.dwolla.nomenclator.consul.agent.ConsulAgent
 import com.dwolla.nomenclator.ecs.agent.EcsAgentIntrospection
-import com.dwolla.nomenclator.model.HostName
+import com.dwolla.nomenclator.model.{HostName, ServiceAddress}
 import org.typelevel.log4cats.StructuredLogger
 import smithy4s.aws.AwsRegion
 
@@ -40,7 +40,7 @@ object StartupDiscovery:
   /** The configured address, otherwise the one the Consul agent advertises.
     */
   def address[F[_]: Temporal: StructuredLogger]
-    (configured: Option[String], consul: ConsulAgent[F], retry: StartupRetry): F[String] =
+    (configured: Option[ServiceAddress], consul: ConsulAgent[F], retry: StartupRetry): F[ServiceAddress] =
     configured.fold(
       retry("the Consul agent's advertised address")(consul.advertisedAddress)
     )(_.pure[F])

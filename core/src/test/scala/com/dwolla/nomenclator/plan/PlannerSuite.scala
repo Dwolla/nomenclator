@@ -16,7 +16,7 @@ class PlannerSuite extends ScalaCheckSuite:
     ServiceId("ip-10-0-0-1:web:8080"),
     ServiceName("web"),
     List(Tag("a"), Tag("b")),
-    "10.0.0.1",
+    ServiceAddress("10.0.0.1"),
     HostPort.from(8080).fold(fail(_), identity),
     Some(tcp)
   )
@@ -53,7 +53,7 @@ class PlannerSuite extends ScalaCheckSuite:
     val s = stateOf(web)
     List(
       s.services.map(_.copy(name = ServiceName("other"))),
-      s.services.map(_.copy(address = "10.9.9.9")),
+      s.services.map(_.copy(address = ServiceAddress("10.9.9.9"))),
       s.services.map(_.copy(port = 1))
     ).foreach: services =>
       assertEquals(
@@ -72,7 +72,7 @@ class PlannerSuite extends ScalaCheckSuite:
       ServiceId("abc123:web:8080"),
       ServiceName("web"),
       Nil,
-      "10.0.0.1",
+      ServiceAddress("10.0.0.1"),
       8080
     )
     val consulItself = registrator.copy(id = ServiceId("consul"))

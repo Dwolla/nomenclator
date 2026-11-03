@@ -44,7 +44,7 @@ final case class NomenclatorConfig(
                                     failureLimit: FiniteDuration,
                                     globalTags: List[Tag],
                                     hostName: Option[HostName],
-                                    address: Option[String],
+                                    address: Option[ServiceAddress],
                                     ecsAgent: Uri,
                                     credentialsRelativeUri: Option[Uri.Path],
                                     credentialsFullUri: Option[Uri],
@@ -103,7 +103,10 @@ object NomenclatorConfig:
       duration(FailureLimitVariable, 2.minutes),
       variable("NOMENCLATOR_TAGS").option.map(_.fold(Nil)(tags)),
       variable("NOMENCLATOR_HOSTNAME").as(using hostName).option,
-      variable("NOMENCLATOR_ADDRESS").as(using nonEmpty).option,
+      variable("NOMENCLATOR_ADDRESS")
+        .as(using nonEmpty)
+        .map(ServiceAddress(_))
+        .option,
       variable("NOMENCLATOR_ECS_AGENT_URL")
         .as(using url)
         .default(Http4sEcsAgentIntrospection.defaultBase),

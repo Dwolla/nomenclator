@@ -3,6 +3,7 @@ package com.dwolla.nomenclator.integration
 import cats.effect.*
 import cats.syntax.all.*
 import com.comcast.ip4s.*
+import com.dwolla.nomenclator.model.TaskArn
 import io.circe.Json
 import io.circe.jawn
 import org.http4s.*
@@ -21,12 +22,14 @@ final class FakeEcsAgent private (val base: Uri, tasks: Ref[IO, Json]):
 
   /** Drops the task with this ARN from what `/v1/tasks` answers.
     */
-  def removeTask(arn: String): IO[Unit] =
+  def removeTask(arn: TaskArn): IO[Unit] =
     tasks.update(json =>
       json.hcursor
         .downField("Tasks")
         .withFocus(
-          _.mapArray(_.filterNot(_.hcursor.get[String]("Arn").contains(arn)))
+          _.mapArray(
+            _.filterNot(_.hcursor.get[String]("Arn").contains(arn.value))
+          )
         )
         .top
         .getOrElse(json)

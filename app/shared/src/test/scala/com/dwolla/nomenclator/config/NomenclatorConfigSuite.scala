@@ -152,7 +152,7 @@ class NomenclatorConfigSuite extends CatsEffectSuite:
     assertFailsNaming("NOMENCLATOR_HOSTNAME" -> "a:b")("NOMENCLATOR_HOSTNAME")
 
   test("NOMENCLATOR_ADDRESS overrides the advertised address"):
-    loaded("NOMENCLATOR_ADDRESS" -> "10.0.0.9").map(c => assertEquals(c.address, Some("10.0.0.9")))
+    loaded("NOMENCLATOR_ADDRESS" -> "10.0.0.9").map(c => assertEquals(c.address, Some(ServiceAddress("10.0.0.9"))))
 
   test("an empty NOMENCLATOR_ADDRESS fails naming the variable"):
     assertFailsNaming("NOMENCLATOR_ADDRESS" -> "")("NOMENCLATOR_ADDRESS")

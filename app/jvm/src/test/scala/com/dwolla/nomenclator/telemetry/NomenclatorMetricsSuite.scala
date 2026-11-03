@@ -31,17 +31,23 @@ class NomenclatorMetricsSuite extends CatsEffectSuite:
       id,
       ServiceName("foo-service"),
       Nil,
-      "10.0.0.1",
+      ServiceAddress("10.0.0.1"),
       ok(HostPort.from(32768)),
       None
     )
 
   private def agentService(id: ServiceId) =
-    AgentService(id, ServiceName("foo-service"), Nil, "10.0.0.1", 32768)
+    AgentService(
+      id,
+      ServiceName("foo-service"),
+      Nil,
+      ServiceAddress("10.0.0.1"),
+      32768
+    )
 
   private def skipped(reason: SkipReason) =
     Skipped(
-      "arn:aws:ecs:us-east-1:123456789012:task/example/foo",
+      TaskArn("arn:aws:ecs:us-east-1:123456789012:task/example/foo"),
       ContainerName("web"),
       ok(ContainerPort.from(8080)),
       reason

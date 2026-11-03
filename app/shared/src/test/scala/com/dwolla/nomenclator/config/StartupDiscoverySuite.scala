@@ -32,12 +32,12 @@ class StartupDiscoverySuite extends CatsEffectSuite:
   /** A Consul agent whose advertised address is the next of `answers`, then the
     * last of them forever. Nothing else is expected of it.
     */
-  private def consulAnswering(answers: List[IO[String]]): IO[ConsulAgent[IO]] =
+  private def consulAnswering(answers: List[IO[ServiceAddress]]): IO[ConsulAgent[IO]] =
     Ref
-      .of[IO, List[IO[String]]](answers)
+      .of[IO, List[IO[ServiceAddress]]](answers)
       .map: remaining =>
         new ConsulAgent[IO]:
-          override val advertisedAddress: IO[String] =
+          override val advertisedAddress: IO[ServiceAddress] =
             remaining
               .modify:
                 case next :: Nil  => (List(next), next)
@@ -104,8 +104,8 @@ class StartupDiscoverySuite extends CatsEffectSuite:
     given StructuredLogger[IO] = StructuredTestingLogger.impl[IO]()
     consulAnswering(Nil).flatMap(consul =>
       StartupDiscovery
-        .address[IO]("10.0.0.9".some, consul, retry)
-        .map(assertEquals(_, "10.0.0.9"))
+        .address[IO](ServiceAddress("10.0.0.9").some, consul, retry)
+        .map(assertEquals(_, ServiceAddress("10.0.0.9")))
     )
 
   test(
@@ -116,14 +116,18 @@ class StartupDiscoverySuite extends CatsEffectSuite:
     TestControl.executeEmbed(
       for
         consul <- consulAnswering(
-          List(unavailable.raiseError, unavailable.raiseError, "10.0.0.1".pure)
+          List(
+            unavailable.raiseError,
+            unavailable.raiseError,
+            ServiceAddress("10.0.0.1").pure
+          )
         )
         start <- IO.monotonic
         address <- StartupDiscovery.address[IO](None, consul, retry)
         took <- IO.monotonic.map(_ - start)
         logged <- logger.logged
       yield
-        assertEquals(address, "10.0.0.1")
+        assertEquals(address, ServiceAddress("10.0.0.1"))
         assertEquals(took, 10.seconds)
         assertEquals(
           logged
@@ -146,7 +150,7 @@ class StartupDiscoverySuite extends CatsEffectSuite:
     val logger = StructuredTestingLogger.impl[IO]()
     given StructuredLogger[IO] = logger
     for
-      consul <- consulAnswering(List("10.0.0.1".pure))
+      consul <- consulAnswering(List(ServiceAddress("10.0.0.1").pure))
       _ <- StartupDiscovery.address[IO](None, consul, retry)
       logged <- logger.logged
     yield assertEquals(logged, Vector.empty)

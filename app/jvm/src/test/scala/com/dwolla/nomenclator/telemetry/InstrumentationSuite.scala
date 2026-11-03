@@ -38,11 +38,12 @@ class InstrumentationSuite extends CatsEffectSuite:
 
   private val consulToken = "s3cret-consul-token"
   private val secretValue = "hunter2-test"
-  private val host = HostIdentity(ok(HostName.from("test-host")), "10.0.0.1")
-  private val ref = TaskDefinitionRef("foo-service", 7)
+  private val host =
+    HostIdentity(ok(HostName.from("test-host")), ServiceAddress("10.0.0.1"))
+  private val ref = TaskDefinitionRef(TaskFamily("foo-service"), 7)
 
   private val fooTask = EcsTask(
-    "arn:aws:ecs:us-east-1:123456789012:task/example/foo",
+    TaskArn("arn:aws:ecs:us-east-1:123456789012:task/example/foo"),
     ref,
     TaskStatus.Running,
     TaskStatus.Running,
@@ -225,7 +226,7 @@ class InstrumentationSuite extends CatsEffectSuite:
       id,
       ServiceName("foo-service"),
       Nil,
-      "10.0.0.1",
+      ServiceAddress("10.0.0.1"),
       ok(HostPort.from(32768)),
       None
     )

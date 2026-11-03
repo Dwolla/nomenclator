@@ -15,7 +15,7 @@ object EcsGen:
 
   val taskDefinitionRef: Gen[TaskDefinitionRef] =
     for
-      family <- identifier
+      family <- ModelGen.taskFamily
       revision <- Gen.posNum[Int]
     yield TaskDefinitionRef(family, revision)
 
@@ -39,7 +39,7 @@ object EcsGen:
 
   val ecsTask: Gen[EcsTask] =
     for
-      arn <- identifier.map("arn:aws:ecs:task/" + _)
+      arn <- ModelGen.taskArn
       definition <- taskDefinitionRef
       known <- taskStatus
       desired <- taskStatus

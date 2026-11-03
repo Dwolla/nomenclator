@@ -49,8 +49,10 @@ class Http4sEcsAgentIntrospectionSuite extends CatsEffectSuite:
 
   private val expectedTasks = List(
     EcsTask(
-      "arn:aws:ecs:us-east-1:123456789012:task/example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      TaskDefinitionRef("foo-service", 3),
+      TaskArn(
+        "arn:aws:ecs:us-east-1:123456789012:task/example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ),
+      TaskDefinitionRef(TaskFamily("foo-service"), 3),
       TaskStatus.Running,
       TaskStatus.Running,
       List(
@@ -65,8 +67,10 @@ class Http4sEcsAgentIntrospectionSuite extends CatsEffectSuite:
       )
     ),
     EcsTask(
-      "arn:aws:ecs:us-east-1:123456789012:task/example/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      TaskDefinitionRef("bar-worker", 12),
+      TaskArn(
+        "arn:aws:ecs:us-east-1:123456789012:task/example/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      ),
+      TaskDefinitionRef(TaskFamily("bar-worker"), 12),
       TaskStatus.Running,
       TaskStatus.Running,
       List(
@@ -92,8 +96,10 @@ class Http4sEcsAgentIntrospectionSuite extends CatsEffectSuite:
       )
     ),
     EcsTask(
-      "arn:aws:ecs:us-east-1:123456789012:task/example/cccccccccccccccccccccccccccccccc",
-      TaskDefinitionRef("foo-service", 2),
+      TaskArn(
+        "arn:aws:ecs:us-east-1:123456789012:task/example/cccccccccccccccccccccccccccccccc"
+      ),
+      TaskDefinitionRef(TaskFamily("foo-service"), 2),
       TaskStatus.Running,
       TaskStatus.Stopped,
       List(
@@ -108,8 +114,10 @@ class Http4sEcsAgentIntrospectionSuite extends CatsEffectSuite:
       )
     ),
     EcsTask(
-      "arn:aws:ecs:us-east-1:123456789012:task/example/dddddddddddddddddddddddddddddddd",
-      TaskDefinitionRef("baz-api", 7),
+      TaskArn(
+        "arn:aws:ecs:us-east-1:123456789012:task/example/dddddddddddddddddddddddddddddddd"
+      ),
+      TaskDefinitionRef(TaskFamily("baz-api"), 7),
       TaskStatus.Running,
       TaskStatus.Running,
       List(
@@ -141,10 +149,10 @@ class Http4sEcsAgentIntrospectionSuite extends CatsEffectSuite:
           assertEquals(
             tasks.map(_.definition),
             List(
-              TaskDefinitionRef("foo-service", 3),
-              TaskDefinitionRef("bar-worker", 12),
-              TaskDefinitionRef("foo-service", 2),
-              TaskDefinitionRef("baz-api", 7)
+              TaskDefinitionRef(TaskFamily("foo-service"), 3),
+              TaskDefinitionRef(TaskFamily("bar-worker"), 12),
+              TaskDefinitionRef(TaskFamily("foo-service"), 2),
+              TaskDefinitionRef(TaskFamily("baz-api"), 7)
             )
           )
         )

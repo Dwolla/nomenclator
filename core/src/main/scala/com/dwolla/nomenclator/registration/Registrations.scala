@@ -13,7 +13,7 @@ import com.dwolla.nomenclator.settings.*
 object Registrations:
 
   private final case class ContainerResult(
-                                            task: String,
+                                            task: TaskArn,
                                             container: ContainerName,
                                             registrations: List[Registration],
                                             skipped: List[Skipped],
@@ -52,7 +52,7 @@ object Registrations:
       awaitingDefinitions = awaiting.toSet,
       customIdRequested = results.collect:
         case result if result.customIdRequested =>
-          (result.task, result.container)
+          CustomIdRequest(result.task, result.container)
     )
   end desired
 
@@ -115,7 +115,7 @@ object Registrations:
         check = check
       )
 
-    val target = s"${host.address}:${binding.hostPort.value.value}"
+    val target = s"${host.address.value}:${binding.hostPort.value.value}"
 
     if (settings.ignored) skipped(SkipReason.Ignored).asLeft
     else

@@ -6,5 +6,5 @@ import com.dwolla.nomenclator.ecs.TaskDefinitionRef
   */
 final case class TaskDefinitionMissing(ref: TaskDefinitionRef)
     extends RuntimeException(
-      s"ECS returned no task definition for ${ref.family}:${ref.revision}"
+      s"ECS returned no task definition for ${ref.value}"
     )

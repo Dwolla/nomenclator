@@ -26,15 +26,16 @@ class ReconcilerSuite extends CatsEffectSuite:
   private def ok[A](either: Either[String, A]): A =
     either.fold(fail(_), identity)
 
-  private val host = HostIdentity(ok(HostName.from("test-host")), "10.0.0.1")
+  private val host =
+    HostIdentity(ok(HostName.from("test-host")), ServiceAddress("10.0.0.1"))
   private val interval = 5.seconds
   private val passTimeout = 30.seconds
   private val lookupTimeout = 5.seconds
-  private val address = "10.0.0.1"
+  private val address = ServiceAddress("10.0.0.1")
 
-  private val fooRef = TaskDefinitionRef("foo-service", 1)
-  private val barRef = TaskDefinitionRef("bar-worker", 2)
-  private val bazRef = TaskDefinitionRef("baz-api", 3)
+  private val fooRef = TaskDefinitionRef(TaskFamily("foo-service"), 1)
+  private val barRef = TaskDefinitionRef(TaskFamily("bar-worker"), 2)
+  private val bazRef = TaskDefinitionRef(TaskFamily("baz-api"), 3)
 
   private def container(name: String, dockerName: String, containerPort: Int, hostPort: Int): EcsContainer =
     EcsContainer(
@@ -57,7 +58,7 @@ class ReconcilerSuite extends CatsEffectSuite:
                       desiredStatus: TaskStatus = TaskStatus.Running
   ): EcsTask =
     EcsTask(
-      s"arn:aws:ecs:us-east-1:123456789012:task/example/$name",
+      TaskArn(s"arn:aws:ecs:us-east-1:123456789012:task/example/$name"),
       ref,
       TaskStatus.Running,
       desiredStatus,
@@ -465,7 +466,7 @@ class ReconcilerSuite extends CatsEffectSuite:
             orphan
           ),
           // foo no longer asks for a check, so it must be replaced
-          List(AgentCheck(s"service:${fooId.value}", fooId.some, None))
+          List(AgentCheck(CheckId(s"service:${fooId.value}"), fooId.some, None))
         )
       )
       seeded <- w.consul.current
@@ -745,7 +746,7 @@ class ReconcilerSuite extends CatsEffectSuite:
         Map(fooRef -> plain),
         AgentState(
           List(agentService(fooId, "foo-service", 32768)),
-          List(AgentCheck(s"service:${fooId.value}", fooId.some, None))
+          List(AgentCheck(CheckId(s"service:${fooId.value}"), fooId.some, None))
         )
       )
       _ <- w.consul.failRegistrationsOf(Set(fooId))
@@ -776,7 +777,7 @@ class ReconcilerSuite extends CatsEffectSuite:
         Map(fooRef -> plain),
         AgentState(
           List(agentService(fooId, "foo-service", 32768)),
-          List(AgentCheck(s"service:${fooId.value}", fooId.some, None))
+          List(AgentCheck(CheckId(s"service:${fooId.value}"), fooId.some, None))
         )
       )
       _ <- w.consul.failRegistrationsOf(Set(fooId))
@@ -807,7 +808,7 @@ class ReconcilerSuite extends CatsEffectSuite:
         Map(fooRef -> plain),
         AgentState(
           List(agentService(fooId, "foo-service", 32768)),
-          List(AgentCheck(s"service:${fooId.value}", fooId.some, None))
+          List(AgentCheck(CheckId(s"service:${fooId.value}"), fooId.some, None))
         )
       )
       _ <- w.consul.failDeregistrationsOf(Set(fooId))
@@ -933,7 +934,8 @@ class ReconcilerSuite extends CatsEffectSuite:
   ):
     // 30 hung lookups, four at a time, would take 8 * lookupTimeout = 40 s,
     // more than passTimeout; the phase is cut off at 2 * lookupTimeout.
-    val refs = (0 until 30).toList.map(i => TaskDefinitionRef(s"svc-$i", 1))
+    val refs =
+      (0 until 30).toList.map(i => TaskDefinitionRef(TaskFamily(s"svc-$i"), 1))
     val tasks = refs.zipWithIndex.map: (ref, i) =>
       task(s"t$i", ref, s"ecs-svc-$i-1-web-abcd", 8000 + i, 32000 + i)
     val ids = (0 until 30).toList.map(i => ServiceId(s"test-host:ecs-svc-$i-1-web-abcd:${8000 + i}"))

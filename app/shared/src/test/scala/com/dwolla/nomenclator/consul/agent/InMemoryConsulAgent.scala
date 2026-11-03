@@ -3,7 +3,7 @@ package com.dwolla.nomenclator.consul.agent
 import cats.effect.*
 import cats.syntax.all.*
 import com.dwolla.nomenclator.consul.*
-import com.dwolla.nomenclator.model.ServiceId
+import com.dwolla.nomenclator.model.{CheckId, ServiceAddress, ServiceId}
 import com.dwolla.nomenclator.registration.Registration
 
 /** A Consul agent held in memory. It records every write attempted, and models
@@ -20,7 +20,8 @@ final class InMemoryConsulAgent private (
 ) extends ConsulAgent[IO]:
   import InMemoryConsulAgent.Attempt
 
-  override val advertisedAddress: IO[String] = "10.0.0.1".pure[IO]
+  override val advertisedAddress: IO[ServiceAddress] =
+    ServiceAddress("10.0.0.1").pure[IO]
 
   override val state: IO[AgentState] =
     stateFailure.get.flatMap(_.fold(agent.get)(_.raiseError[IO, AgentState]))
@@ -55,7 +56,7 @@ final class InMemoryConsulAgent private (
   private def registered(s: AgentState, r: Registration): AgentState =
     val service =
       AgentService(r.id, r.name, r.tags, r.address, r.port.value.value)
-    val checkId = s"service:${r.id.value}"
+    val checkId = CheckId(s"service:${r.id.value}")
     val checks = r.check.fold(s.checks)(_ =>
       s.checks.filterNot(_.checkId == checkId) :+
         AgentCheck(checkId, r.id.some, None)

@@ -24,13 +24,18 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
     present(skips)({ case Entry.Skip(s) => s }, Entry.Skip(_))
       .flatMap((appeared, _) => appeared.traverse_(logSkip))
 
-  def customIdsRequested(requests: List[(String, ContainerName)]): F[Unit] =
+  def customIdsRequested(requests: List[CustomIdRequest]): F[Unit] =
     present(requests)(
-      { case Entry.CustomId(task, container) => (task, container) },
-      Entry.CustomId(_, _)
+      { case Entry.CustomId(request) => request },
+      Entry.CustomId(_)
     ).flatMap((appeared, _) =>
-      appeared.traverse_ : (task, container) =>
-        logger.warn(Map("task" -> task, "container" -> container.value))(
+      appeared.traverse_ : request =>
+        logger.warn(
+          Map(
+            "task" -> request.task.value,
+            "container" -> request.container.value
+          )
+        )(
           "SERVICE_ID is not honored; registering under the host-shaped ID instead"
         )
     )
@@ -106,14 +111,14 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
       started.traverse_ : (ref, e) =>
         logger.warn(
           Map(
-            "task_definition" -> render(ref),
+            "task_definition" -> ref.value,
             "error_type" -> e.getClass.getName
           )
         )(
           "Task definition lookup failed; its tasks wait, and their existing registrations are kept"
         )
       >> recovered.traverse_(ref =>
-        logger.info(Map("task_definition" -> render(ref)))(
+        logger.info(Map("task_definition" -> ref.value))(
           "Task definition lookup succeeded after failing"
         )
       )
@@ -188,7 +193,7 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
 
   private def logSkip(s: Skipped): F[Unit] =
     val context = Map(
-      "task" -> s.task,
+      "task" -> s.task.value,
       "container" -> s.container.value,
       "port" -> s.port.value.value.toString,
       "reason" -> SkipReasonLabel.of(s.reason).value
@@ -230,7 +235,7 @@ object ChangeLog:
 
   private[reconcile] enum Entry:
     case Skip(skipped: Skipped)
-    case CustomId(task: String, container: ContainerName)
+    case CustomId(request: CustomIdRequest)
     case Unowned(id: ServiceId)
     case Shadow(difference: Difference)
     case DependencyFailing(dependency: Dependency)
@@ -240,9 +245,6 @@ object ChangeLog:
 
   def apply[F[_]: Monad: Ref.Make: StructuredLogger]: F[ChangeLog[F]] =
     Ref.of[F, Set[Entry]](Set.empty).map(new ChangeLog(_))
-
-  private def render(ref: TaskDefinitionRef): String =
-    s"${ref.family}:${ref.revision}"
 
   private def describe(error: SettingsError): String = error match
     case SettingsError.InvalidDuration(key, value) =>

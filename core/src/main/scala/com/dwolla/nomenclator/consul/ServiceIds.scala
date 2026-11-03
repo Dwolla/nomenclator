@@ -45,5 +45,5 @@ object ServiceIds:
 
   /** The ID Consul gives the check registered with a service: `service:<id>`.
     */
-  def checkId(id: ServiceId): String = s"service:${id.value}"
+  def checkId(id: ServiceId): CheckId = CheckId(s"service:${id.value}")
 end ServiceIds

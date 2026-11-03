@@ -193,7 +193,7 @@ object NomenclatorApp:
     StructuredLogger[F].info(
       Map(
         "host_name" -> host.name.value,
-        "address" -> host.address,
+        "address" -> host.address.value,
         "aws_region" -> region.value
       )
     )("Discovered this host's identity and region")

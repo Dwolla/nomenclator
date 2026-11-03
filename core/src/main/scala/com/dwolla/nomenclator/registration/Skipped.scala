@@ -1,7 +1,7 @@
 package com.dwolla.nomenclator.registration
 
 import cats.data.NonEmptyChain
-import com.dwolla.nomenclator.model.{ContainerName, ContainerPort}
+import com.dwolla.nomenclator.model.{ContainerName, ContainerPort, TaskArn}
 import com.dwolla.nomenclator.settings.SettingsError
 
 /** Why a container port was not turned into a registration.
@@ -19,7 +19,6 @@ enum SkipReason:
   case InvalidSettings(errors: NonEmptyChain[SettingsError])
 end SkipReason
 
-/** A container port that was deliberately not registered. `task` is the task
-  * ARN.
+/** A container port that was deliberately not registered.
   */
-final case class Skipped(task: String, container: ContainerName, port: ContainerPort, reason: SkipReason)
+final case class Skipped(task: TaskArn, container: ContainerName, port: ContainerPort, reason: SkipReason)

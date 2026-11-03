@@ -28,7 +28,7 @@ class ServiceIdsSuite extends ScalaCheckSuite:
   test("a registration's check is service:<id>"):
     assertEquals(
       ServiceIds.checkId(ServiceId("ip-10-0-0-1:ecs-web-1:8080")),
-      "service:ip-10-0-0-1:ecs-web-1:8080"
+      CheckId("service:ip-10-0-0-1:ecs-web-1:8080")
     )
 
   test("a host-shaped TCP ID is owned"):

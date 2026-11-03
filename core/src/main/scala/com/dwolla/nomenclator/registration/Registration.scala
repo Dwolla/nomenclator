@@ -8,7 +8,7 @@ final case class Registration(
                                id: ServiceId,
                                name: ServiceName,
                                tags: List[Tag],
-                               address: String,
+                               address: ServiceAddress,
                                port: HostPort,
                                check: Option[Check]
 )

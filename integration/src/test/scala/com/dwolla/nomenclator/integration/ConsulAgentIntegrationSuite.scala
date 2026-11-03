@@ -39,7 +39,7 @@ class ConsulAgentIntegrationSuite extends CatsEffectSuite:
       ServiceId(id),
       ServiceName("foo-service"),
       tags,
-      "10.0.0.1",
+      ServiceAddress("10.0.0.1"),
       hostPort(32768),
       check
     )
@@ -52,7 +52,7 @@ class ConsulAgentIntegrationSuite extends CatsEffectSuite:
     state.checks.filter(_.serviceId.contains(ServiceId(id)))
 
   private def checkIds(state: AgentState): Set[String] =
-    state.checks.map(_.checkId).toSet
+    state.checks.map(_.checkId.value).toSet
 
   private def enableMaintenance(r: Running, id: String): IO[Unit] =
     r.client
@@ -99,7 +99,7 @@ class ConsulAgentIntegrationSuite extends CatsEffectSuite:
     agentFixture.test(s"${version.label}: the advertised address is an IP"): r =>
       r.agent.advertisedAddress.map: address =>
         assert(
-          IpAddress.fromString(address).isDefined,
+          IpAddress.fromString(address.value).isDefined,
           s"not an IP: $address"
         )
 
@@ -128,7 +128,7 @@ class ConsulAgentIntegrationSuite extends CatsEffectSuite:
           )
         )
         assertEquals(
-          checksOf(state, "h:web:80").map(_.checkId),
+          checksOf(state, "h:web:80").map(_.checkId.value),
           List("service:h:web:80")
         )
       end for
@@ -140,7 +140,7 @@ class ConsulAgentIntegrationSuite extends CatsEffectSuite:
         _ <- r.agent.register(registration("h:db:81", Some(tcpCheck)))
         state <- r.agent.state
       yield assertEquals(
-        checksOf(state, "h:db:81").map(_.checkId),
+        checksOf(state, "h:db:81").map(_.checkId.value),
         List("service:h:db:81")
       )
 
@@ -223,7 +223,7 @@ class ConsulAgentIntegrationSuite extends CatsEffectSuite:
         _ <- r.agent.register(registration("h:web:80", Some(tcpCheck)))
         state <- r.agent.state
       yield assertEquals(
-        checksOf(state, "h:web:80").map(_.checkId),
+        checksOf(state, "h:web:80").map(_.checkId.value),
         List("service:h:web:80")
       )
 
@@ -237,7 +237,7 @@ class ConsulAgentIntegrationSuite extends CatsEffectSuite:
         _ <- r.agent.register(registration("h:web:80"))
         state <- r.agent.state
       yield assertEquals(
-        checksOf(state, "h:web:80").map(_.checkId),
+        checksOf(state, "h:web:80").map(_.checkId.value),
         List("service:h:web:80")
       )
 
@@ -260,7 +260,7 @@ class ConsulAgentIntegrationSuite extends CatsEffectSuite:
         // The maintenance check belongs to the service but is not the
         // registration's own check.
         assertEquals(
-          checksOf(afterReregistration, "h:web:80").map(_.checkId).toSet,
+          checksOf(afterReregistration, "h:web:80").map(_.checkId.value).toSet,
           expected
         )
       end for

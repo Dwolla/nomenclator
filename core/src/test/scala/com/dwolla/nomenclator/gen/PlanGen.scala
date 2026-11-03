@@ -34,7 +34,7 @@ object PlanGen:
       containerName <- ModelGen.dockerName
       port <- ModelGen.hostPort
       tags <- Gen.listOfN(2, ModelGen.tag)
-      address <- ModelGen.identifier
+      address <- ModelGen.serviceAddress
       c <- Gen.option(check)
     yield Registration(
       ServiceId(s"${host.value}:${containerName.value}:${port.value.value}"),
@@ -76,12 +76,13 @@ object PlanGen:
 
   /** The check Consul assigns to a registration's check: `service:<id>`.
     */
-  def registrationCheckId(id: ServiceId): String = s"service:${id.value}"
+  def registrationCheckId(id: ServiceId): CheckId =
+    CheckId(s"service:${id.value}")
 
   /** The check `consul maint` adds to a service.
     */
   def maintenanceCheckFor(id: ServiceId): AgentCheck =
-    AgentCheck(s"_service_maintenance:${id.value}", id.some, None)
+    AgentCheck(CheckId(s"_service_maintenance:${id.value}"), id.some, None)
 
   def agentCheckFor(id: ServiceId, c: Check): AgentCheck =
     AgentCheck(registrationCheckId(id), id.some, definitionOf(c).some)
@@ -114,7 +115,7 @@ object PlanGen:
         1 -> ModelGen.identifier.map(n =>
           List(
             AgentCheck(
-              n,
+              CheckId(n),
               id.some,
               definitionOf(Check.Tcp("x:1", 1.second, None)).some
             )
@@ -132,7 +133,7 @@ object PlanGen:
       Gen.const(s.copy(tags = Tag("drift") :: s.tags)),
       Gen.const(s.copy(tags = s.tags.reverse :+ Tag("x"))),
       Gen.const(s.copy(port = s.port + 1)),
-      Gen.const(s.copy(address = s.address + "x")),
+      Gen.const(s.copy(address = ServiceAddress(s.address.value + "x"))),
       Gen.const(s.copy(name = ServiceName(s.name.value + "x")))
     )
 
@@ -163,7 +164,10 @@ object PlanGen:
       port <- Gen.choose(1, 65535)
       expected <- Gen.option(check)
       checks <- checksFor(id, expected)
-    yield (AgentService(id, name, tags, "10.0.0.9", port), checks)
+    yield (
+      AgentService(id, name, tags, ServiceAddress("10.0.0.9"), port),
+      checks
+    )
 
   /** An agent state around the desired registrations: some in sync, some
     * drifted or absent, plus owned leftovers, services that aren't ours, and
@@ -179,7 +183,7 @@ object PlanGen:
       leftovers <- Gen.listOf(hostShapedId(host).flatMap(extra))
       foreign <- Gen.listOf(foreignId(host).flatMap(extra))
       orphans <- Gen.listOf(
-        ModelGen.identifier.map(i => AgentCheck(i, None, None))
+        ModelGen.identifier.map(i => AgentCheck(CheckId(i), None, None))
       )
     yield
       val all = kept.flatten ++ leftovers ++ foreign

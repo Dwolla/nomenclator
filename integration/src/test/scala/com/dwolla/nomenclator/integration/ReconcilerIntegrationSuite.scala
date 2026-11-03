@@ -27,17 +27,19 @@ import scala.concurrent.duration.*
 class ReconcilerIntegrationSuite extends CatsEffectSuite:
   override def munitIOTimeout: Duration = 3.minutes
 
-  private val address = "10.0.0.1"
+  private val address = ServiceAddress("10.0.0.1")
   private val host = HostIdentity(
     HostName.from("test-host").fold(fail(_), identity),
     address
   )
 
-  private val fooRef = TaskDefinitionRef("foo-service", 3)
-  private val barRef = TaskDefinitionRef("bar-worker", 12)
-  private val bazRef = TaskDefinitionRef("baz-api", 7)
+  private val fooRef = TaskDefinitionRef(TaskFamily("foo-service"), 3)
+  private val barRef = TaskDefinitionRef(TaskFamily("bar-worker"), 12)
+  private val bazRef = TaskDefinitionRef(TaskFamily("baz-api"), 7)
   private val barTask =
-    "arn:aws:ecs:us-east-1:123456789012:task/example/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    TaskArn(
+      "arn:aws:ecs:us-east-1:123456789012:task/example/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    )
 
   private val fooWeb =
     ServiceId("test-host:ecs-foo-service-3-web-a1b2c3d4e5f6a7b8c9d0:8080")
@@ -179,7 +181,7 @@ class ReconcilerIntegrationSuite extends CatsEffectSuite:
         assertEquals(
           state.checks
             .filter(_.serviceId.exists(Set(fooWeb, barTcp, barUdp)))
-            .map(_.checkId)
+            .map(_.checkId.value)
             .sorted,
           List(s"service:${barTcp.value}", s"service:${fooWeb.value}")
         )

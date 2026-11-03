@@ -24,11 +24,12 @@ class ReconcileSpanSuite extends CatsEffectSuite:
   private def ok[A](either: Either[String, A]): A =
     either.fold(fail(_), identity)
 
-  private val host = HostIdentity(ok(HostName.from("test-host")), "10.0.0.1")
+  private val host =
+    HostIdentity(ok(HostName.from("test-host")), ServiceAddress("10.0.0.1"))
 
   private def task(name: String, ref: TaskDefinitionRef, port: Int) =
     EcsTask(
-      s"arn:aws:ecs:us-east-1:123456789012:task/example/$name",
+      TaskArn(s"arn:aws:ecs:us-east-1:123456789012:task/example/$name"),
       ref,
       TaskStatus.Running,
       TaskStatus.Running,
@@ -51,11 +52,17 @@ class ReconcileSpanSuite extends CatsEffectSuite:
   private def settings(env: (String, String)*) =
     Map(ContainerName("web") -> ContainerSettings.fromRaw(env.toMap, Map.empty))
 
-  private val fooRef = TaskDefinitionRef("foo-service", 1)
-  private val scriptedRef = TaskDefinitionRef("scripted", 1)
+  private val fooRef = TaskDefinitionRef(TaskFamily("foo-service"), 1)
+  private val scriptedRef = TaskDefinitionRef(TaskFamily("scripted"), 1)
 
   private def agentService(id: String) =
-    AgentService(ServiceId(id), ServiceName("old"), Nil, "10.0.0.1", 32767)
+    AgentService(
+      ServiceId(id),
+      ServiceName("old"),
+      Nil,
+      ServiceAddress("10.0.0.1"),
+      32767
+    )
 
   test("the reconcile span carries the pass's counts"):
     OtelJavaTestkit

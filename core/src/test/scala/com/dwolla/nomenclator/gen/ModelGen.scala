@@ -26,6 +26,11 @@ object ModelGen:
   val serviceName: Gen[ServiceName] =
     identifier.map(s => ServiceName(s))
   val tag: Gen[Tag] = Gen.alphaNumStr.map(Tag(_))
+  val serviceAddress: Gen[ServiceAddress] =
+    identifier.map(s => ServiceAddress(s))
+  val taskArn: Gen[TaskArn] =
+    identifier.map(s => TaskArn("arn:aws:ecs:task/" + s))
+  val taskFamily: Gen[TaskFamily] = identifier.map(s => TaskFamily(s))
   val containerName: Gen[ContainerName] =
     identifier.map(s => ContainerName(s))
   private val dockerNameChar: Gen[Char] =

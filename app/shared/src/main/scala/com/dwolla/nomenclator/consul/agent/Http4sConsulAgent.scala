@@ -51,8 +51,8 @@ object Http4sConsulAgent:
         _.as[A](using summon, RedactedJson.decoder[F, A])
       )
 
-    override val advertisedAddress: F[String] =
-      get[String]("self")(using ConsulCodecs.memberAddress)
+    override val advertisedAddress: F[ServiceAddress] =
+      get[ServiceAddress]("self")(using ConsulCodecs.memberAddress)
 
     // Two reads, not an atomic snapshot: acceptable while the reconciler is
     // the only writer.

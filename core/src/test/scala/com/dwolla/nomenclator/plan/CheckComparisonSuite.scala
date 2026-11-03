@@ -2,7 +2,7 @@ package com.dwolla.nomenclator.plan
 
 import com.dwolla.nomenclator.consul.*
 import com.dwolla.nomenclator.gen.PlanGen
-import com.dwolla.nomenclator.model.ServiceId
+import com.dwolla.nomenclator.model.{CheckId, ServiceId}
 import com.dwolla.nomenclator.registration.Check
 import munit.ScalaCheckSuite
 import org.scalacheck.Prop.forAll
@@ -116,7 +116,7 @@ class CheckComparisonSuite extends ScalaCheckSuite:
   test("only the check with ID service:<id> is the registration's check"):
     val own = agentCheck(None)
     val maintenance = PlanGen.maintenanceCheckFor(id)
-    val other = AgentCheck("custom", Some(id), None)
+    val other = AgentCheck(CheckId("custom"), Some(id), None)
     val detached = AgentCheck(PlanGen.registrationCheckId(id), None, None)
     val state = AgentState(Nil, List(maintenance, other, detached, own))
     assertEquals(CheckComparison.registrationChecks(state), Map(id -> own))
