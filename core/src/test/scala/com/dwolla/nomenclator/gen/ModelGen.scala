@@ -28,8 +28,17 @@ object ModelGen:
   val tag: Gen[Tag] = Gen.alphaNumStr.map(Tag(_))
   val containerName: Gen[ContainerName] =
     identifier.map(s => ContainerName(s))
+  private val dockerNameChar: Gen[Char] =
+    Gen.oneOf(Gen.alphaNumChar, Gen.const('_'), Gen.const('.'), Gen.const('-'))
+
+  /** Docker's own container-name alphabet: at least two characters, the first
+    * alphanumeric.
+    */
   val dockerName: Gen[DockerName] =
-    identifier.map(s => DockerName(s))
+    for
+      first <- Gen.alphaNumChar
+      rest <- Gen.nonEmptyListOf(dockerNameChar)
+    yield DockerName((first :: rest).mkString)
   val imageName: Gen[ImageName] =
     identifier.map(s => ImageName(s))
   private val portNumber: Gen[Int] = Gen.choose(0, 65535)

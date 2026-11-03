@@ -1,6 +1,7 @@
 package com.dwolla.nomenclator.registration
 
 import cats.data.NonEmptyChain
+import com.dwolla.nomenclator.consul.Ownership
 import com.dwolla.nomenclator.ecs.*
 import com.dwolla.nomenclator.gen.{EcsGen, ModelGen}
 import com.dwolla.nomenclator.model.*
@@ -335,4 +336,46 @@ class RegistrationsSuite extends ScalaCheckSuite:
     forAll(ModelGen.containerPort, ModelGen.hostPort): (cp, hp) =>
       val t = task(List(PortBinding(cp, hp, Protocol.Tcp)))
       desired(t, env("SERVICE_IGNORE" -> "1")).registrations.isEmpty
+
+  private val runningTasks: Gen[(HostName, List[EcsTask])] = Gen.resize(
+    8, {
+      val publishingTask = for
+        generated <- EcsGen.ecsTask
+        containers <- Gen.nonEmptyListOf(EcsGen.ecsContainer)
+      yield generated.copy(
+        knownStatus = TaskStatus.Running,
+        desiredStatus = TaskStatus.Running,
+        containers = containers.map(c => c.copy(ports = c.ports.distinctBy(p => (p.containerPort, p.protocol))))
+      )
+      // Docker gives every container a unique name, so IDs can only collide if
+      // the generator repeats one.
+      for
+        hostName <- ModelGen.hostName
+        tasks <- Gen.nonEmptyListOf(publishingTask)
+      yield (hostName, uniquelyNamed(tasks))
+    }
+  )
+
+  private def uniquelyNamed(tasks: List[EcsTask]): List[EcsTask] =
+    val containers = tasks.flatMap(_.containers).distinctBy(_.dockerName.value)
+    tasks.map(t => t.copy(containers = t.containers.filter(c => containers.exists(_ eq c))))
+
+  private def desiredFor(hostName: HostName, tasks: List[EcsTask]) =
+    Registrations.desired(
+      HostIdentity(hostName, "10.0.0.1"),
+      tasks,
+      tasks
+        .map(_.definition -> Map.empty[ContainerName, ContainerSettings])
+        .toMap,
+      Nil
+    )
+
+  property("every desired id is owned by its host"):
+    forAll(runningTasks): (hostName, tasks) =>
+      desiredFor(hostName, tasks).registrations.forall(r => Ownership.owns(hostName, r.id))
+
+  property("desired ids are distinct"):
+    forAll(runningTasks): (hostName, tasks) =>
+      val ids = desiredFor(hostName, tasks).registrations.map(_.id.value)
+      assertEquals(ids.distinct, ids)
 end RegistrationsSuite
