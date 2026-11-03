@@ -72,3 +72,7 @@ introspection fixtures, and fake AWS endpoints. Nothing touches AWS; the credent
    `curl -s 127.0.0.1:<port>/v1/agent/services`. After Ctrl-C they are still there.
 
 5. Clean up: stop the fakes with Ctrl-C, then `docker rm -f nomenclator-smoke-consul`.
+
+## License
+
+MIT; see [LICENSE](LICENSE).

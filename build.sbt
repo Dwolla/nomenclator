@@ -23,11 +23,14 @@ val logbackVersion = "1.5.23"
 val slf4jVersion = "2.0.17"
 
 ThisBuild / organization := "com.dwolla"
+ThisBuild / organizationName := "Dwolla"
+ThisBuild / startYear := Some(2026)
+ThisBuild / licenses := Seq(License.MIT)
 ThisBuild / tlBaseVersion := "0.1"
 ThisBuild / scalaVersion := "3.9.0"
 ThisBuild / crossScalaVersions := Seq("3.9.0")
 ThisBuild / tlFatalWarnings := true
-// The project has no license, so there are no license headers to check.
+// LICENSE covers every source file, so none carries a license header.
 ThisBuild / headerCreate / skip := true
 ThisBuild / headerCheck / skip := true
 
