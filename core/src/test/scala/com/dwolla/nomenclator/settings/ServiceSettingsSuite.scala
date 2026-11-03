@@ -8,7 +8,7 @@ import org.scalacheck.Prop.{forAll, propBoolean}
 
 class ServiceSettingsSuite extends ScalaCheckSuite:
   private def port(n: Int): ContainerPort =
-    ContainerPort.from(n).fold(sys.error, identity)
+    ContainerPort.from(n).fold(fail(_), identity)
 
   private def settingsFor
     (n: Int, env: Map[String, String] = Map.empty, labels: Map[String, String] = Map.empty): ServiceSettings =

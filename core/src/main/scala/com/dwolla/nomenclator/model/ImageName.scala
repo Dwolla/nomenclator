@@ -5,7 +5,7 @@ package com.dwolla.nomenclator.model
 opaque type ImageName = String
 
 object ImageName:
-  def from(value: String): Either[String, ImageName] = Right(value)
+  def apply(value: String): ImageName = value
 
   extension (self: ImageName) def value: String = self
 end ImageName

@@ -5,7 +5,7 @@ package com.dwolla.nomenclator.model
 opaque type DockerName = String
 
 object DockerName:
-  def from(value: String): Either[String, DockerName] = Right(value)
+  def apply(value: String): DockerName = value
 
   extension (self: DockerName) def value: String = self
 end DockerName

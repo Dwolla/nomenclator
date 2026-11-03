@@ -5,7 +5,7 @@ package com.dwolla.nomenclator.model
 opaque type ServiceName = String
 
 object ServiceName:
-  def from(value: String): Either[String, ServiceName] = Right(value)
+  def apply(value: String): ServiceName = value
 
   extension (self: ServiceName) def value: String = self
 end ServiceName

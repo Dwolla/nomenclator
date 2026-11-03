@@ -5,7 +5,7 @@ package com.dwolla.nomenclator.model
 opaque type ContainerName = String
 
 object ContainerName:
-  def from(value: String): Either[String, ContainerName] = Right(value)
+  def apply(value: String): ContainerName = value
 
   extension (self: ContainerName) def value: String = self
 end ContainerName

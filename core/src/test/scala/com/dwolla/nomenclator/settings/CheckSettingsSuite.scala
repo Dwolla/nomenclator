@@ -11,7 +11,7 @@ class CheckSettingsSuite extends FunSuite:
     CheckSettings.from(
       ServiceSettings.forPort(
         ContainerSettings.fromRaw(env.toMap, Map.empty),
-        ContainerPort.from(80).fold(sys.error, identity)
+        ContainerPort.from(80).fold(fail(_), identity)
       )
     )
 
