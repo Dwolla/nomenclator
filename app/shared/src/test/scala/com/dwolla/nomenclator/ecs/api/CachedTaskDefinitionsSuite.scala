@@ -127,7 +127,7 @@ class CachedTaskDefinitionsSuite extends CatsEffectSuite:
       _ <- defs.settings(ref).attempt
       seen <- requests.get
     yield
-      assertEquals(failed, Left(TaskDefinitionMissing(ref)))
+      assertEquals(failed, Left(TaskDefinitionMissingError(ref)))
       assertEquals(seen.size, 2)
 
   test("each lookup reports whether it was cached, fetched, or failed"):

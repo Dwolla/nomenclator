@@ -16,7 +16,7 @@ final class InMemoryTaskDefinitions private (
 ) extends TaskDefinitions[IO]:
   override def settings(ref: TaskDefinitionRef): IO[Map[ContainerName, ContainerSettings]] =
     answers.get.flatMap(
-      _.getOrElse(ref, TaskDefinitionMissing(ref).raiseError)
+      _.getOrElse(ref, TaskDefinitionMissingError(ref).raiseError)
     )
 
   /** Answers are what the test set, so nothing is forgotten; the call is only

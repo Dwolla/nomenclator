@@ -8,7 +8,7 @@ import cats.effect.syntax.all.*
 import cats.effect.unsafe.metrics.IORuntimeMetrics as RuntimeMetrics
 import cats.syntax.all.*
 import com.dwolla.nomenclator.aws.ContainerCredentials
-import com.dwolla.nomenclator.config.*
+import com.dwolla.nomenclator.config.NomenclatorConfig
 import com.dwolla.nomenclator.consul.agent.{ConsulAgent, Http4sConsulAgent}
 import com.dwolla.nomenclator.ecs.agent.{EcsAgentIntrospection, Http4sEcsAgentIntrospection}
 import com.dwolla.nomenclator.ecs.api.*
@@ -16,6 +16,7 @@ import com.dwolla.nomenclator.model.HostName
 import com.dwolla.nomenclator.reconcile.*
 import com.dwolla.nomenclator.registration.HostIdentity
 import com.dwolla.nomenclator.settings.GoDuration
+import com.dwolla.nomenclator.startup.*
 import com.dwolla.nomenclator.telemetry.*
 import com.dwolla.nomenclator.telemetry.AlgebraAspects.given
 import com.dwolla.tracing.DwollaEnvironment

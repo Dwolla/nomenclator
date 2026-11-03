@@ -1,5 +1,7 @@
 package com.dwolla.nomenclator.ecs
 
+import cats.syntax.all.*
+
 final case class InstanceMetadata(cluster: String, containerInstanceArn: String):
 
   /** The AWS region the container instance is in, as its ARN
@@ -8,6 +10,6 @@ final case class InstanceMetadata(cluster: String, containerInstanceArn: String)
     */
   def region: Option[String] =
     containerInstanceArn.split(":", 6).toList match
-      case "arn" :: _ :: "ecs" :: region :: _ if region.nonEmpty => Some(region)
+      case "arn" :: _ :: "ecs" :: region :: _ if region.nonEmpty => region.some
       case _                                                     => None
 end InstanceMetadata

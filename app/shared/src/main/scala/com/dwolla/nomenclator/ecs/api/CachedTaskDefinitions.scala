@@ -44,7 +44,7 @@ object CachedTaskDefinitions:
           private def describe(ref: TaskDefinitionRef): F[Map[ContainerName, ContainerSettings]] =
             for
               response <- ecs.describeTaskDefinition(ref.value)
-              _ <- TaskDefinitionMissing(ref)
+              _ <- TaskDefinitionMissingError(ref)
                 .raiseError[F, Unit]
                 .whenA(response.taskDefinition.isEmpty)
               extracted = ServiceSettingsExtraction(response)

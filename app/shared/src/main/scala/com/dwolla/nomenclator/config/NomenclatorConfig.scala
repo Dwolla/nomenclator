@@ -15,7 +15,8 @@ import smithy4s.aws.AwsRegion
 import scala.concurrent.duration.*
 
 /** Nomenclator's settings, from environment variables. Settings left unset here
-  * are discovered at startup: see [[StartupDiscovery]].
+  * are discovered at startup: see
+  * [[com.dwolla.nomenclator.startup.StartupDiscovery]].
   *
   * @param hostName
   *   `NOMENCLATOR_HOSTNAME`; otherwise the local host's name

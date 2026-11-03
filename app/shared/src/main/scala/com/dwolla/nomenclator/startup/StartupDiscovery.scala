@@ -1,4 +1,4 @@
-package com.dwolla.nomenclator.config
+package com.dwolla.nomenclator.startup
 
 import cats.MonadThrow
 import cats.effect.*
