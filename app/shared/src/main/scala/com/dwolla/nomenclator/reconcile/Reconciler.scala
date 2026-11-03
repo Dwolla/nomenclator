@@ -1,6 +1,5 @@
 package com.dwolla.nomenclator.reconcile
 
-import cats.MonadThrow
 import cats.effect.*
 import cats.effect.syntax.all.*
 import cats.syntax.all.*
@@ -27,8 +26,11 @@ object Reconciler:
     * each, failed passes included. A pass that can't read the ECS agent or the
     * Consul agent writes nothing. A pass still running after `passTimeout` is
     * abandoned and fails with [[PassTimedOut]]; the writes it made stay made,
-    * and the next pass's plan retries the rest. The stream fails with
-    * [[ReconcileFailedTooLong]] once `policy`'s limit passes without a
+    * and the next pass's plan retries the rest. Each task definition lookup
+    * that takes longer than `lookupTimeout`, or is unfinished when the lookups
+    * have taken twice that, fails, leaving its tasks awaiting their definition,
+    * so a hung ECS API can't hold up the rest of the host. The stream fails
+    * with [[ReconcileFailedTooLong]] once `policy`'s limit passes without a
     * successful pass; otherwise it runs until it is interrupted, and never
     * deregisters anything on the way out.
     */
@@ -36,6 +38,7 @@ object Reconciler:
                                                         mode: Mode,
                                                         interval: FiniteDuration,
                                                         passTimeout: FiniteDuration,
+                                                        lookupTimeout: FiniteDuration,
                                                         host: HostIdentity,
                                                         globalTags: List[Tag],
                                                         intro: EcsAgentIntrospection[F],
@@ -46,7 +49,16 @@ object Reconciler:
     Stream
       .eval((ChangeLog[F], Temporal[F].monotonic).tupled)
       .flatMap: (changeLog, start) =>
-        val pass = Pass(mode, host, globalTags, intro, defs, consul, changeLog)
+        val pass = Pass(
+          mode,
+          lookupTimeout,
+          host,
+          globalTags,
+          intro,
+          defs,
+          consul,
+          changeLog
+        )
         Stream
           .fixedRateStartImmediately[F](interval, dampen = true)
           .evalMapAccumulate(start): (lastSuccess, _) =>
@@ -77,14 +89,15 @@ object Reconciler:
                 else Stream.empty
               )
 
-  private final class Pass[F[_]: MonadThrow: StructuredLogger](
-                                                                mode: Mode,
-                                                                host: HostIdentity,
-                                                                globalTags: List[Tag],
-                                                                intro: EcsAgentIntrospection[F],
-                                                                defs: TaskDefinitions[F],
-                                                                consul: ConsulAgent[F],
-                                                                changeLog: ChangeLog[F]
+  private final class Pass[F[_]: Temporal: StructuredLogger](
+                                                              mode: Mode,
+                                                              lookupTimeout: FiniteDuration,
+                                                              host: HostIdentity,
+                                                              globalTags: List[Tag],
+                                                              intro: EcsAgentIntrospection[F],
+                                                              defs: TaskDefinitions[F],
+                                                              consul: ConsulAgent[F],
+                                                              changeLog: ChangeLog[F]
   ):
 
     /** Fails, having written nothing, when the ECS agent or the Consul agent
@@ -104,19 +117,24 @@ object Reconciler:
             .filterNot(Ownership.owns(host.name, _))
         )
         actual <- read(Dependency.Consul, consul.state)
-        plan = keepRegistrationsOfAwaitingTasks(
-          Planner.plan(host.name, desired.registrations, actual),
+        awaitingTaskOwns = ownedByAnyOf(
           running.filter(t => desired.awaitingDefinitions(t.definition))
         )
+        planned = Planner.plan(host.name, desired.registrations, actual)
+        plan = planned.copy(deregister = planned.deregister.filterNot(awaitingTaskOwns))
         outcome <- mode match
           case Mode.Apply =>
-            applyPlan(plan, actual).map(PassOutcome(desired, plan, Nil, _))
+            applyPlan(plan, actual).map(
+              PassOutcome(desired, actual, plan, Nil, _)
+            )
           case Mode.Shadow =>
-            val differences =
-              ShadowReport.compare(desired.registrations, actual)
+            val differences = ShadowReport.compare(
+              desired.registrations,
+              actual.copy(services = actual.services.filterNot(s => awaitingTaskOwns(s.id)))
+            )
             changeLog
               .differences(differences)
-              .as(PassOutcome(desired, plan, differences, Nil))
+              .as(PassOutcome(desired, actual, plan, differences, Nil))
       yield outcome
 
     private def read[A](dependency: Dependency, fa: F[A]): F[A] =
@@ -126,25 +144,27 @@ object Reconciler:
       * A failed lookup leaves its tasks awaiting their definition.
       */
     private def definitions(running: List[EcsTask]) =
-      running
-        .map(_.definition)
-        .distinct
-        .traverse(ref => defs.settings(ref).attempt.tupleLeft(ref))
+      DefinitionLookups
+        .within(running.map(_.definition).distinct, lookupTimeout)(
+          defs.settings
+        )
         .flatTap(changeLog.definitionLookups)
         .map(_.collect:
           case (ref, Right(settings)) => ref -> settings
         .toMap)
 
-    /** A task whose definition can't be looked up produces no registrations, so
-      * the planner would deregister what it registered earlier. Its services'
-      * IDs start with this host's name and one of its containers' Docker names,
-      * which can't contain the `:` that separates them.
+    /** Whether a service ID belongs to one of `tasks`' containers. A task
+      * awaiting its definition produces no registrations, so without this the
+      * planner would deregister what it registered earlier, and shadow mode
+      * would report it as extra. Its services' IDs start with this host's name
+      * and one of its containers' Docker names, which can't contain the `:`
+      * that separates them.
       */
-    private def keepRegistrationsOfAwaitingTasks(plan: Plan, awaiting: List[EcsTask]): Plan =
-      val prefixes = awaiting
+    private def ownedByAnyOf(tasks: List[EcsTask]): ServiceId => Boolean =
+      val prefixes = tasks
         .flatMap(_.containers)
         .map(c => s"${host.name.value}:${c.dockerName.value}:")
-      plan.copy(deregister = plan.deregister.filterNot(id => prefixes.exists(id.value.startsWith)))
+      id => prefixes.exists(id.value.startsWith)
 
     /** Deregisters, then registers, as the [[com.dwolla.nomenclator.plan.Plan]]
       * contract requires. Every write is attempted whatever happened to the
@@ -156,35 +176,45 @@ object Reconciler:
       val replaced =
         plan.register.map(_.id).toSet.intersect(plan.deregister.toSet)
 
+      def deregisteredLog(id: ServiceId): F[Unit] =
+        changed(
+          "deregister",
+          id,
+          onAgent.get(id).fold(Map.empty)(LogContext.of)
+        )
+
+      // A replacement is logged once both halves are known: as `replace` if
+      // both succeeded, as `deregister` if only the deregistration did.
       val deregistrations = plan.deregister.traverse: id =>
         consul
           .deregister(id)
           .attempt
-          .flatTap(
-            _.traverse_(_ =>
-              changed(
-                "deregister",
-                id,
-                onAgent.get(id).fold(Map.empty)(LogContext.of)
-              ).unlessA(replaced(id))
-            )
-          )
+          .flatTap(_.traverse_(_ => deregisteredLog(id).unlessA(replaced(id))))
           .tupleLeft(id)
 
-      val registrations = plan.register.traverse: r =>
-        val kind =
-          if (replaced(r.id)) "replace"
-          else if (onAgent.contains(r.id)) "update"
-          else "register"
-        consul
-          .register(r)
-          .attempt
-          .flatTap(_.traverse_(_ => changed(kind, r.id, LogContext.of(r))))
-          .tupleLeft(r.id)
+      def registrations(deregistered: Set[ServiceId]) =
+        plan.register.traverse: r =>
+          val removed = replaced(r.id) && deregistered(r.id)
+          val kind =
+            if (removed) "replace"
+            else if (onAgent.contains(r.id)) "update"
+            else "register"
+          consul
+            .register(r)
+            .attempt
+            .flatTap:
+              case Right(_) => changed(kind, r.id, LogContext.of(r))
+              case Left(_)  => deregisteredLog(r.id).whenA(removed)
+            .tupleLeft(r.id)
 
       for
         deregistered <- deregistrations
-        registered <- registrations
+        registered <- registrations(
+          deregistered
+            .collect:
+              case (id, Right(_)) => id
+            .toSet
+        )
         results = deregistered ++ registered
         _ <- changeLog.writes(results)
       yield results.collect:

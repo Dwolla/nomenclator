@@ -1,6 +1,7 @@
 package com.dwolla.nomenclator.integration
 
 import cats.effect.*
+import cats.syntax.all.*
 import com.dimafeng.testcontainers.GenericContainer
 import com.dwolla.nomenclator.consul.agent.ConsulAgent
 import org.http4s.Uri
@@ -42,13 +43,13 @@ object ConsulContainer:
         c)(c => IO.blocking(c.stop()))
       .map(c =>
         Uri(
-          scheme = Some(Uri.Scheme.http),
-          authority = Some(
-            Uri.Authority(
+          scheme = Uri.Scheme.http.some,
+          authority = Uri
+            .Authority(
               host = Uri.RegName(c.host),
-              port = Some(c.mappedPort(httpPort))
+              port = c.mappedPort(httpPort).some
             )
-          )
+            .some
         )
       )
 
@@ -60,6 +61,6 @@ object ConsulContainer:
       agent.state.void.handleErrorWith:
         case _ if remaining > 0 =>
           IO.sleep(500.millis) >> attempt(remaining - 1)
-        case e => IO.raiseError(e)
+        case e => e.raiseError[IO, Unit]
     attempt(secondsToWaitForAgent * 2)
 end ConsulContainer

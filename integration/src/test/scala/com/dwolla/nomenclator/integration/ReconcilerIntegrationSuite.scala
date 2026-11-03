@@ -98,6 +98,7 @@ class ReconcilerIntegrationSuite extends CatsEffectSuite:
           Mode.Apply,
           100.millis,
           30.seconds,
+          5.seconds,
           host,
           Nil,
           r.introspection,

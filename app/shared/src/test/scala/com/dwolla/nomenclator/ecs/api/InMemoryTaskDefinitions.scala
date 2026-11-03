@@ -14,22 +14,24 @@ final class InMemoryTaskDefinitions private (answers: Ref[IO, Answers])
     extends TaskDefinitions[IO]:
   override def settings(ref: TaskDefinitionRef): IO[Map[ContainerName, ContainerSettings]] =
     answers.get.flatMap(
-      _.getOrElse(ref, TaskDefinitionMissing(ref).asLeft).liftTo[IO]
+      _.getOrElse(ref, TaskDefinitionMissing(ref).raiseError)
     )
 
   def fail(ref: TaskDefinitionRef, e: Throwable): IO[Unit] =
-    answers.update(_.updated(ref, e.asLeft))
+    answers.update(_.updated(ref, e.raiseError))
+
+  /** Looking up `ref` never gets an answer.
+    */
+  def hang(ref: TaskDefinitionRef): IO[Unit] =
+    answers.update(_.updated(ref, IO.never))
 end InMemoryTaskDefinitions
 
 object InMemoryTaskDefinitions:
   private type Answers =
-    Map[
-      TaskDefinitionRef,
-      Either[Throwable, Map[ContainerName, ContainerSettings]]
-    ]
+    Map[TaskDefinitionRef, IO[Map[ContainerName, ContainerSettings]]]
 
   def apply(known: Map[TaskDefinitionRef, Map[ContainerName, ContainerSettings]]): IO[InMemoryTaskDefinitions] =
     Ref
-      .of[IO, Answers](known.view.mapValues(_.asRight).toMap)
+      .of[IO, Answers](known.view.mapValues(_.pure[IO]).toMap)
       .map(new InMemoryTaskDefinitions(_))
 end InMemoryTaskDefinitions

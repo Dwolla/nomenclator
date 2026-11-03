@@ -10,6 +10,7 @@ import com.dwolla.nomenclator.ecs.*
 import com.dwolla.nomenclator.ecs.agent.*
 import com.dwolla.nomenclator.ecs.api.*
 import com.dwolla.nomenclator.model.*
+import com.dwolla.nomenclator.plan.Difference
 import com.dwolla.nomenclator.registration.HostIdentity
 import com.dwolla.nomenclator.settings.ContainerSettings
 import fs2.Stream
@@ -28,12 +29,43 @@ class ReconcilerSuite extends CatsEffectSuite:
   private val host = HostIdentity(ok(HostName.from("test-host")), "10.0.0.1")
   private val interval = 5.seconds
   private val passTimeout = 30.seconds
+  private val lookupTimeout = 5.seconds
   private val address = "10.0.0.1"
 
   private val fooRef = TaskDefinitionRef("foo-service", 1)
   private val barRef = TaskDefinitionRef("bar-worker", 2)
   private val bazRef = TaskDefinitionRef("baz-api", 3)
 
+  private def container(name: String, dockerName: String, containerPort: Int, hostPort: Int): EcsContainer =
+    EcsContainer(
+      ContainerName(name),
+      DockerName(dockerName),
+      ImageName(s"registry.example.com/$name:1"),
+      List(
+        PortBinding(
+          ok(ContainerPort.from(containerPort)),
+          ok(HostPort.from(hostPort)),
+          Protocol.Tcp
+        )
+      )
+    )
+
+  private def taskOf(
+                      name: String,
+                      ref: TaskDefinitionRef,
+                      containers: List[EcsContainer],
+                      desiredStatus: TaskStatus = TaskStatus.Running
+  ): EcsTask =
+    EcsTask(
+      s"arn:aws:ecs:us-east-1:123456789012:task/example/$name",
+      ref,
+      TaskStatus.Running,
+      desiredStatus,
+      containers
+    )
+
+  /** A task with one container, `web`, whose image is named after `ref`.
+    */
   private def task(
                     name: String,
                     ref: TaskDefinitionRef,
@@ -42,25 +74,14 @@ class ReconcilerSuite extends CatsEffectSuite:
                     hostPort: Int,
                     desiredStatus: TaskStatus = TaskStatus.Running
   ): EcsTask =
-    EcsTask(
-      s"arn:aws:ecs:us-east-1:123456789012:task/example/$name",
+    taskOf(
+      name,
       ref,
-      TaskStatus.Running,
-      desiredStatus,
       List(
-        EcsContainer(
-          ContainerName("web"),
-          DockerName(dockerName),
-          ImageName(s"registry.example.com/${ref.family}:1"),
-          List(
-            PortBinding(
-              ok(ContainerPort.from(containerPort)),
-              ok(HostPort.from(hostPort)),
-              Protocol.Tcp
-            )
-          )
-        )
-      )
+        container("web", dockerName, containerPort, hostPort)
+          .copy(image = ImageName(s"registry.example.com/${ref.family}:1"))
+      ),
+      desiredStatus
     )
 
   private val foo =
@@ -117,6 +138,7 @@ class ReconcilerSuite extends CatsEffectSuite:
       mode,
       interval,
       passTimeout,
+      lookupTimeout,
       host,
       Nil,
       w.ecs,
@@ -124,6 +146,7 @@ class ReconcilerSuite extends CatsEffectSuite:
       w.consul,
       policy
     )
+  end reconcile
 
   /** Runs `n` passes. `between(i)` runs after pass `i` and before the next.
     */
@@ -420,15 +443,20 @@ class ReconcilerSuite extends CatsEffectSuite:
           List(AgentCheck(s"service:${fooId.value}", fooId.some, None))
         )
       )
-      _ <- passes(w, 2)()
+      seeded <- w.consul.current
+      reports <- passes(w, 2)()
       writes <- w.consul.writes
       agent <- w.consul.current
       logged <- w.logger.logged
-    yield (writes, agent, logged)
+    yield (seeded, reports, writes, agent, logged)
 
     TestControl
       .executeEmbed(program)
-      .map: (writes, agent, logged) =>
+      .map: (seeded, reports, writes, agent, logged) =>
+        assertEquals(
+          reports.map(_.outcome.map(_.actual)),
+          List(Right(seeded), Right(agent))
+        )
         assertEquals(
           described(writes),
           Vector(
@@ -611,4 +639,208 @@ class ReconcilerSuite extends CatsEffectSuite:
           1,
           logged.toString
         )
+
+  private val awaitingFailure = new RuntimeException("throttled")
+
+  test(
+    "a definition lookup that never returns times out, and the rest of the host keeps reconciling"
+  ):
+    val program = for
+      w <- world(
+        List(foo, bar),
+        Map(fooRef -> plain),
+        AgentState(List(agentService(barId, "bar-worker", 32769), orphan), Nil)
+      )
+      _ <- w.defs.hang(barRef)
+      reports <- reconcile(w, policy = FailurePolicy.exitAfter(2.minutes))
+        .interruptAfter(3.minutes)
+        .compile
+        .toList
+      writes <- w.consul.writes
+      agent <- w.consul.current
+      logged <- w.logger.logged
+    yield (reports, writes, agent, logged)
+
+    TestControl
+      .executeEmbed(program)
+      .map: (reports, writes, agent, logged) =>
+        assert(reports.sizeIs > 30, reports.size.toString)
+        assert(reports.forall(_.outcome.isRight), reports.toString)
+        assert(reports.forall(_.duration == lookupTimeout), reports.toString)
+        assertEquals(
+          described(writes),
+          Vector(s"deregister ${orphan.id.value}", s"register ${fooId.value}")
+        )
+        assertEquals(agent.services.map(_.id).toSet, Set(barId, fooId))
+        assertEquals(warnings(logged).size, 1, logged.toString)
+
+  test("shadow mode doesn't report an awaiting task's services as extra"):
+    val program = for
+      w <- world(
+        List(foo, bar),
+        Map(fooRef -> plain),
+        AgentState(List(agentService(barId, "bar-worker", 32769)), Nil)
+      )
+      _ <- w.defs.fail(barRef, awaitingFailure)
+      reports <- passes(w, 1, Mode.Shadow)()
+    yield reports
+
+    TestControl
+      .executeEmbed(program)
+      .map: reports =>
+        assertEquals(
+          reports.map(
+            _.outcome.map(_.differences.map:
+              case Difference.Missing(r)         => s"missing ${r.id.value}"
+              case Difference.Extra(s)           => s"extra ${s.id.value}"
+              case Difference.Different(r, _, _) => s"different ${r.id.value}")
+          ),
+          List(Right(List(s"missing ${fooId.value}")))
+        )
+
+  test(
+    "a replacement whose register fails is logged as a deregistration, with a warning"
+  ):
+    val program = for
+      w <- world(
+        List(foo),
+        Map(fooRef -> plain),
+        AgentState(
+          List(agentService(fooId, "foo-service", 32768)),
+          List(AgentCheck(s"service:${fooId.value}", fooId.some, None))
+        )
+      )
+      _ <- w.consul.failRegistrationsOf(Set(fooId))
+      _ <- passes(w, 1)()
+      logged <- w.logger.logged
+    yield logged
+
+    TestControl
+      .executeEmbed(program)
+      .map: logged =>
+        assertEquals(
+          infos(logged).map(_.ctx.get("kind")),
+          Vector(Some("deregister")),
+          logged.toString
+        )
+        assertEquals(
+          warnings(logged).filter(about(fooId)).size,
+          1,
+          logged.toString
+        )
+
+  test("a failed deregistration doesn't stop the others"):
+    val otherOrphan =
+      orphan.copy(id = ServiceId("test-host:ecs-gone-2-web-eeee:8080"))
+    val program = for
+      w <- world(Nil, Map.empty, AgentState(List(orphan, otherOrphan), Nil))
+      _ <- w.consul.failDeregistrationsOf(Set(orphan.id))
+      reports <- passes(w, 1)()
+      writes <- w.consul.writes
+      agent <- w.consul.current
+    yield (reports, writes, agent)
+
+    TestControl
+      .executeEmbed(program)
+      .map: (reports, writes, agent) =>
+        assertEquals(
+          described(writes),
+          Vector(
+            s"deregister ${orphan.id.value}",
+            s"deregister ${otherOrphan.id.value}"
+          )
+        )
+        assertEquals(agent.services, List(orphan))
+        assertEquals(
+          reports.map(_.outcome.map(_.failures.map(_._1))),
+          List(Right(List(orphan.id)))
+        )
+
+  /** Runs one apply pass with `barRef`'s definition failing, and returns the
+    * IDs left on the agent.
+    */
+  private def remainingWhileBarAwaits(tasks: List[EcsTask], seeded: List[ServiceId]): IO[Set[ServiceId]] =
+    val program = for
+      w <- world(
+        tasks,
+        Map.empty,
+        AgentState(seeded.map(agentService(_, "seeded", 31000)), Nil)
+      )
+      _ <- w.defs.fail(barRef, awaitingFailure)
+      _ <- passes(w, 1)()
+      agent <- w.consul.current
+    yield agent.services.map(_.id).toSet
+    TestControl.executeEmbed(program)
+
+  test(
+    "an awaiting task's Docker name protects only IDs with exactly that name"
+  ):
+    val awaiting = task("bar", barRef, "ecs-foo", 8080, 32768)
+    val kept = ServiceId("test-host:ecs-foo:8080")
+    val longerName = ServiceId("test-host:ecs-foo-bar:8080")
+    remainingWhileBarAwaits(List(awaiting), List(kept, longerName))
+      .map(assertEquals(_, Set(kept)))
+
+  test("every container of an awaiting task keeps its registrations"):
+    val awaiting = taskOf(
+      "bar",
+      barRef,
+      List(
+        container("web", "ecs-bar-worker-2-web-bbbb", 9000, 32769),
+        container("worker", "ecs-bar-worker-2-worker-bbbb", 9100, 32771)
+      )
+    )
+    val ids = List(
+      barId,
+      ServiceId("test-host:ecs-bar-worker-2-worker-bbbb:9100")
+    )
+    remainingWhileBarAwaits(List(awaiting), ids)
+      .map(assertEquals(_, ids.toSet))
+
+  test(
+    "a stopping task that shares an awaiting task's definition is still deregistered"
+  ):
+    val stopping = task(
+      "bar-old",
+      barRef,
+      "ecs-bar-worker-2-web-ffff",
+      9000,
+      32772,
+      desiredStatus = TaskStatus.Stopped
+    )
+    val stoppingId = ServiceId("test-host:ecs-bar-worker-2-web-ffff:9000")
+    remainingWhileBarAwaits(List(bar, stopping), List(barId, stoppingId))
+      .map(assertEquals(_, Set(barId)))
+
+  test(
+    "the lookup phase ends at its deadline when many lookups hang, keeping what finished"
+  ):
+    // 30 hung lookups, four at a time, would take 8 * lookupTimeout = 40 s,
+    // more than passTimeout; the phase is cut off at 2 * lookupTimeout.
+    val refs = (0 until 30).toList.map(i => TaskDefinitionRef(s"svc-$i", 1))
+    val tasks = refs.zipWithIndex.map: (ref, i) =>
+      task(s"t$i", ref, s"ecs-svc-$i-1-web-abcd", 8000 + i, 32000 + i)
+    val ids = (0 until 30).toList.map(i => ServiceId(s"test-host:ecs-svc-$i-1-web-abcd:${8000 + i}"))
+    val program = for
+      w <- world(
+        tasks,
+        Map(refs.head -> plain),
+        AgentState(ids.tail.map(agentService(_, "seeded", 31000)), Nil)
+      )
+      _ <- refs.tail.traverse_(w.defs.hang)
+      reports <- passes(w, 1)()
+      writes <- w.consul.writes
+      agent <- w.consul.current
+    yield (reports, writes, agent)
+
+    TestControl
+      .executeEmbed(program)
+      .map: (reports, writes, agent) =>
+        assertEquals(reports.map(_.duration), List(2 * lookupTimeout))
+        assertEquals(
+          reports.map(_.outcome.map(_.desired.awaitingDefinitions)),
+          List(Right(refs.tail.toSet))
+        )
+        assertEquals(described(writes), Vector(s"register ${ids.head.value}"))
+        assertEquals(agent.services.map(_.id).toSet, ids.toSet)
 end ReconcilerSuite

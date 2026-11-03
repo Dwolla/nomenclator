@@ -15,6 +15,7 @@ final class InMemoryConsulAgent private (
     stateFailure: Ref[IO, Option[Throwable]],
     failingRegistrations: Ref[IO, Set[ServiceId]],
     hangingRegistrations: Ref[IO, Set[ServiceId]],
+    failingDeregistrations: Ref[IO, Set[ServiceId]],
     attempted: Ref[IO, Vector[InMemoryConsulAgent.Write]]
 ) extends ConsulAgent[IO]:
   import InMemoryConsulAgent.Write
@@ -35,12 +36,21 @@ final class InMemoryConsulAgent private (
 
   override def deregister(id: ServiceId): IO[Unit] =
     attempted.update(_ :+ Write.Deregister(id)) >>
-      agent.update(s =>
-        AgentState(
-          s.services.filterNot(_.id == id),
-          s.checks.filterNot(_.serviceId.contains(id))
-        )
-      )
+      failingDeregistrations.get.flatMap: failing =>
+        if (failing.contains(id))
+          ConsulAgentError(
+            "PUT",
+            s"/v1/agent/service/deregister/${id.value}",
+            500,
+            "boom"
+          ).raiseError[IO, Unit]
+        else
+          agent.update(s =>
+            AgentState(
+              s.services.filterNot(_.id == id),
+              s.checks.filterNot(_.serviceId.contains(id))
+            )
+          )
 
   private def registered(s: AgentState, r: Registration): AgentState =
     val service =
@@ -63,6 +73,9 @@ final class InMemoryConsulAgent private (
   def failRegistrationsOf(ids: Set[ServiceId]): IO[Unit] =
     failingRegistrations.set(ids)
 
+  def failDeregistrationsOf(ids: Set[ServiceId]): IO[Unit] =
+    failingDeregistrations.set(ids)
+
   /** Registering these IDs never gets an answer.
     */
   def hangRegistrationsOf(ids: Set[ServiceId]): IO[Unit] =
@@ -82,6 +95,7 @@ object InMemoryConsulAgent:
       Ref.of[IO, Option[Throwable]](None),
       Ref.of[IO, Set[ServiceId]](Set.empty),
       Ref.of[IO, Set[ServiceId]](Set.empty),
+      Ref.of[IO, Set[ServiceId]](Set.empty),
       Ref.of[IO, Vector[Write]](Vector.empty)
-    ).mapN(new InMemoryConsulAgent(_, _, _, _, _))
+    ).mapN(new InMemoryConsulAgent(_, _, _, _, _, _))
 end InMemoryConsulAgent
