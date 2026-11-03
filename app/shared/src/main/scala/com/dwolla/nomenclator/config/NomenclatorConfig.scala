@@ -4,7 +4,7 @@ import cats.effect.Async
 import cats.syntax.all.*
 import ciris.*
 import com.dwolla.nomenclator.model.*
-import com.dwolla.nomenclator.reconcile.Mode
+import com.dwolla.nomenclator.reconcile.{DefinitionLookups, Mode}
 import com.dwolla.nomenclator.settings.GoDuration
 import com.comcast.ip4s.*
 import com.dwolla.nomenclator.ecs.agent.Http4sEcsAgentIntrospection
@@ -131,16 +131,18 @@ object NomenclatorConfig:
   end fromEnvironment
 
   /** How the timing settings contradict one another. A pass must be able to
-    * wait out its definition lookups, finish before the failure limit, and
-    * finish before the next one starts.
+    * wait out its definition lookups with one lookup timeout to spare for the
+    * rest of the pass, finish before the failure limit, and finish before the
+    * next one starts.
     */
   private def timingProblems(config: NomenclatorConfig): List[String] =
     import config.*
     def shown(name: String, value: FiniteDuration) =
       s"$name (${GoDuration.render(value)})"
+    val shortestPass = DefinitionLookups.deadline(lookupTimeout) + lookupTimeout
     List(
-      Option.when(passTimeout <= lookupTimeout * 2)(
-        s"${shown(PassTimeoutVariable, passTimeout)} must be more than twice ${shown(LookupTimeoutVariable, lookupTimeout)}"
+      Option.when(passTimeout < shortestPass)(
+        s"${shown(PassTimeoutVariable, passTimeout)} must be at least ${GoDuration.render(shortestPass)}: the lookup phase's deadline, two and a half times ${shown(LookupTimeoutVariable, lookupTimeout)}, plus one more $LookupTimeoutVariable for the rest of the pass"
       ),
       Option.when(passTimeout >= failureLimit)(
         s"${shown(PassTimeoutVariable, passTimeout)} must be less than ${shown(FailureLimitVariable, failureLimit)}"
@@ -149,6 +151,7 @@ object NomenclatorConfig:
         s"${shown(IntervalVariable, interval)} must not be more than ${shown(PassTimeoutVariable, passTimeout)}"
       )
     ).flatten
+  end timingProblems
 
   private val mode: ConfigDecoder[String, Mode] =
     ConfigDecoder[String].mapOption(

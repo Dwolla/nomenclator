@@ -5,7 +5,7 @@ import cats.effect.syntax.all.*
 import cats.syntax.all.*
 import com.dwolla.nomenclator.consul.*
 import com.dwolla.nomenclator.consul.agent.ConsulAgent
-import com.dwolla.nomenclator.ecs.EcsTask
+import com.dwolla.nomenclator.ecs.{EcsTask, TaskDefinitionRef}
 import com.dwolla.nomenclator.ecs.agent.EcsAgentIntrospection
 import com.dwolla.nomenclator.ecs.api.TaskDefinitions
 import com.dwolla.nomenclator.model.*
@@ -28,10 +28,10 @@ object Reconciler:
     * Consul agent writes nothing. A pass still running after `passTimeout` is
     * abandoned and fails with [[PassTimedOut]]; the writes it made stay made,
     * and the next pass's plan retries the rest. Each task definition lookup
-    * that takes longer than `lookupTimeout`, or is unfinished when the lookups
-    * have taken twice that, fails, leaving its tasks awaiting their definition,
-    * so a hung ECS API can't hold up the rest of the host. The stream fails
-    * with [[ReconcileFailedTooLong]] once `policy`'s limit passes without a
+    * that takes longer than `lookupTimeout`, or is unfinished at the lookup
+    * phase's deadline, fails, leaving its tasks awaiting their definition, so a
+    * hung ECS API can't hold up the rest of the host. The stream fails with
+    * [[ReconcileFailedTooLong]] once `policy`'s limit passes without a
     * successful pass; otherwise it runs until it is interrupted, and never
     * deregisters anything on the way out.
     */
@@ -48,8 +48,14 @@ object Reconciler:
                                                         policy: FailurePolicy
   ): Stream[F, PassReport] =
     Stream
-      .eval((ChangeLog[F], Temporal[F].monotonic).tupled)
-      .flatMap: (changeLog, start) =>
+      .eval(
+        (
+          ChangeLog[F],
+          Ref.of[F, List[TaskDefinitionRef]](Nil),
+          Temporal[F].monotonic
+        ).tupled
+      )
+      .flatMap: (changeLog, failedLookups, start) =>
         val pass = Pass(
           mode,
           lookupTimeout,
@@ -58,7 +64,8 @@ object Reconciler:
           intro,
           defs,
           consul,
-          changeLog
+          changeLog,
+          failedLookups
         )
         Stream
           .fixedRateStartImmediately[F](interval, dampen = true)
@@ -98,7 +105,8 @@ object Reconciler:
                                                                       intro: EcsAgentIntrospection[F],
                                                                       defs: TaskDefinitions[F],
                                                                       consul: ConsulAgent[F],
-                                                                      changeLog: ChangeLog[F]
+                                                                      changeLog: ChangeLog[F],
+                                                                      failedLookups: Ref[F, List[TaskDefinitionRef]]
   ):
 
     /** Fails, having written nothing, when the ECS agent or the Consul agent
@@ -166,17 +174,25 @@ object Reconciler:
       fa.attempt.flatTap(changeLog.dependency(dependency, _)).rethrow
 
     /** The settings of every running task's definition that could be looked up.
-      * A failed lookup leaves its tasks awaiting their definition.
+      * A failed lookup leaves its tasks awaiting their definition, and is
+      * looked up after the others next pass, taking turns with other failed
+      * lookups.
       */
     private def definitions(running: List[EcsTask]) =
-      DefinitionLookups
-        .within(running.map(_.definition).distinct, lookupTimeout)(
-          defs.settings
-        )
-        .flatTap(changeLog.definitionLookups)
-        .map(_.collect:
-          case (ref, Right(settings)) => ref -> settings
-        .toMap)
+      for
+        failedBefore <- failedLookups.get
+        results <- DefinitionLookups.within(
+          running.map(_.definition).distinct,
+          lookupTimeout,
+          failedBefore
+        )(defs.settings)
+        _ <- failedLookups.set(DefinitionLookups.failed(failedBefore, results))
+        _ <- changeLog.definitionLookups(results)
+      yield results
+        .collect:
+          case (ref, Right(settings)) =>
+            ref -> settings
+        .toMap
 
     /** Whether a service ID belongs to one of `tasks`' containers. A task
       * awaiting its definition produces no registrations, so without this the

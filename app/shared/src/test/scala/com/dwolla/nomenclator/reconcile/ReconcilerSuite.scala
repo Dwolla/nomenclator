@@ -20,6 +20,7 @@ import org.typelevel.log4cats.testing.StructuredTestingLogger
 import org.typelevel.log4cats.testing.StructuredTestingLogger.*
 import org.typelevel.otel4s.trace.Tracer
 
+import java.util.Base64
 import scala.concurrent.duration.*
 
 class ReconcilerSuite extends CatsEffectSuite:
@@ -83,6 +84,19 @@ class ReconcilerSuite extends CatsEffectSuite:
           .copy(image = ImageName(s"registry.example.com/${ref.family}:1"))
       ),
       desiredStatus
+    )
+
+  /** `n` tasks, `hung-1` to `hung-n`, each of its own definition.
+    */
+  private def hungTasks(n: Int): List[EcsTask] =
+    (1 to n).toList.map(i =>
+      task(
+        s"hung-$i",
+        TaskDefinitionRef(TaskFamily(s"hung-$i"), 1),
+        s"ecs-hung-$i-1-web-ffff",
+        8000 + i,
+        33000 + i
+      )
     )
 
   private val foo =
@@ -159,6 +173,25 @@ class ReconcilerSuite extends CatsEffectSuite:
       .take(n.toLong)
       .compile
       .toList
+
+  /** A TestControl seed: the base64 of a decimal Long, as TestContext expects.
+    * Fibers that wake at the same instant run in an order the seed picks.
+    */
+  private def seed(n: Long): String =
+    Base64.getEncoder.encodeToString(n.toString.getBytes)
+
+  /** Runs `program` under one fixed TestControl seed, so fibers that wake at
+    * the same instant run in the same order every run.
+    */
+  private def underFixedSeed[A](program: IO[A]): IO[A] =
+    TestControl.executeEmbed(program, seed = seed(1).some)
+
+  /** Runs `program` under 100 fixed TestControl seeds, so a timing property is
+    * checked against many orderings, the same ones every run. Each result comes
+    * with its seed, for a failing assertion's clue to name.
+    */
+  private def underManySeeds[A](program: IO[A]): IO[List[(String, A)]] =
+    (1L to 100L).toList.traverse(n => TestControl.executeEmbed(program, seed = seed(n).some).tupleLeft(seed(n)))
 
   private def described(writes: Vector[Attempt]): Vector[String] =
     writes.map:
@@ -425,6 +458,66 @@ class ReconcilerSuite extends CatsEffectSuite:
     TestControl
       .executeEmbed(program)
       .map(assertEquals(_, Vector(Set(fooRef, barRef), Set(fooRef))))
+
+  test(
+    "definitions that failed are looked up last, so hung ones can't starve the rest"
+  ):
+    // Twelve hung lookups hold all four slots past the lookup phase's
+    // deadline, so a definition listed after them never starts.
+    val hung = hungTasks(12)
+    val program = for
+      w <- world(hung :+ foo, Map(fooRef -> plain))
+      _ <- hung.traverse_(t => w.defs.hang(t.definition))
+      reports <- passes(w, 2)()
+    yield reports
+
+    underFixedSeed(program).map: reports =>
+      assertEquals(
+        reports.map(_.outcome.map(_.plan.register.map(_.id))),
+        List(Right(Nil), Right(List(fooId)))
+      )
+
+  test(
+    "a new definition is looked up even when more hang than a pass can start"
+  ):
+    // With every slot hung, a pass gives exactly 8 lookups a full turn and
+    // starts 12: four slots, each held for lookupTimeout, until the phase's
+    // deadline at two and a half times that cuts off the third round.
+    val hung = hungTasks(24)
+    val program = for
+      w <- world(hung :+ foo, Map(fooRef -> plain))
+      _ <- hung.traverse_(t => w.defs.hang(t.definition))
+      _ <- passes(w, 4)()
+      agent <- w.consul.current
+    yield agent
+
+    underManySeeds(program).map(
+      _.foreach((seed, agent) => assertEquals(agent.services.map(_.id), List(fooId), s"seed $seed"))
+    )
+
+  test(
+    "hung definitions take turns, so one that recovers is looked up within a few passes"
+  ):
+    // By the third pass every definition has failed at least once.
+    val hung = hungTasks(24)
+    val recovering = hung(19)
+    val recoveringId = ServiceId("test-host:ecs-hung-20-1-web-ffff:8020")
+    val program = for
+      w <- world(hung, Map.empty)
+      _ <- hung.traverse_(t => w.defs.hang(t.definition))
+      _ <- passes(w, 7)(i => w.defs.answer(recovering.definition, plain).whenA(i == 2))
+      agent <- w.consul.current
+    yield agent
+
+    underManySeeds(program).map(
+      _.foreach((seed, agent) =>
+        assertEquals(
+          agent.services.map(_.id),
+          List(recoveringId),
+          s"seed $seed"
+        )
+      )
+    )
 
   test("definitions are looked up only for running tasks"):
     val stopping = bar.copy(desiredStatus = TaskStatus.Stopped)
@@ -933,7 +1026,7 @@ class ReconcilerSuite extends CatsEffectSuite:
     "the lookup phase ends at its deadline when many lookups hang, keeping what finished"
   ):
     // 30 hung lookups, four at a time, would take 8 * lookupTimeout = 40 s,
-    // more than passTimeout; the phase is cut off at 2 * lookupTimeout.
+    // more than passTimeout; the phase is cut off at its deadline.
     val refs =
       (0 until 30).toList.map(i => TaskDefinitionRef(TaskFamily(s"svc-$i"), 1))
     val tasks = refs.zipWithIndex.map: (ref, i) =>
@@ -954,7 +1047,10 @@ class ReconcilerSuite extends CatsEffectSuite:
     TestControl
       .executeEmbed(program)
       .map: (reports, writes, agent) =>
-        assertEquals(reports.map(_.duration), List(2 * lookupTimeout))
+        assertEquals(
+          reports.map(_.duration),
+          List(DefinitionLookups.deadline(lookupTimeout))
+        )
         assertEquals(
           reports.map(_.outcome.map(_.desired.awaitingDefinitions)),
           List(Right(refs.tail.toSet))

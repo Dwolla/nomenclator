@@ -90,13 +90,15 @@ class NomenclatorConfigSuite extends CatsEffectSuite:
       assertFailsNaming(name -> "0s")(name) >>
         assertFailsNaming(name -> "-5s")(name)
 
-  test("the pass timeout must exceed twice the lookup timeout"):
+  test(
+    "the pass timeout must leave one lookup timeout after the lookup phase's deadline"
+  ):
     assertFailsNaming(
-      "NOMENCLATOR_PASS_TIMEOUT" -> "10s",
+      "NOMENCLATOR_PASS_TIMEOUT" -> "17499ms",
       "NOMENCLATOR_LOOKUP_TIMEOUT" -> "5s"
     )("NOMENCLATOR_PASS_TIMEOUT", "NOMENCLATOR_LOOKUP_TIMEOUT") >>
       loaded(
-        "NOMENCLATOR_PASS_TIMEOUT" -> "11s",
+        "NOMENCLATOR_PASS_TIMEOUT" -> "17500ms",
         "NOMENCLATOR_LOOKUP_TIMEOUT" -> "5s"
       ).void
 

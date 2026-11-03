@@ -32,6 +32,9 @@ final class InMemoryTaskDefinitions private (
   def fail(ref: TaskDefinitionRef, e: Throwable): IO[Unit] =
     answers.update(_.updated(ref, e.raiseError))
 
+  def answer(ref: TaskDefinitionRef, settings: Map[ContainerName, ContainerSettings]): IO[Unit] =
+    answers.update(_.updated(ref, settings.pure[IO]))
+
   /** Looking up `ref` never gets an answer.
     */
   def hang(ref: TaskDefinitionRef): IO[Unit] =

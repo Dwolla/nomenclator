@@ -14,7 +14,7 @@ Nomenclator reads environment variables. Durations use Go's syntax (`5s`, `1m30s
 | `CONSUL_HTTP_ADDR` | `127.0.0.1:8500` | The local Consul agent; plain HTTP unless a scheme is given. |
 | `CONSUL_HTTP_TOKEN` | none | ACL token. Never logged. |
 | `NOMENCLATOR_INTERVAL` | `5s` | Time between reconcile passes. At most the pass timeout. |
-| `NOMENCLATOR_PASS_TIMEOUT` | `30s` | A pass still running after this fails. More than twice the lookup timeout, less than the failure limit. |
+| `NOMENCLATOR_PASS_TIMEOUT` | `30s` | A pass still running after this fails. At least three and a half times the lookup timeout (the lookup phase's deadline, two and a half times it, plus one for the rest of the pass), less than the failure limit. |
 | `NOMENCLATOR_LOOKUP_TIMEOUT` | `5s` | Bound on each task definition lookup. |
 | `NOMENCLATOR_FAILURE_LIMIT` | `2m` | Exit non-zero after this long without a successful pass. |
 | `NOMENCLATOR_TAGS` | none | Tags added to every service, comma-separated, kept exactly as written. |
