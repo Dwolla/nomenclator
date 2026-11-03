@@ -56,6 +56,7 @@ object PlanGen:
     check match
       case Check.Http(url, every, limit) =>
         CheckDefinition(
+          None,
           url.some,
           None,
           GoDuration.render(every).some,
@@ -63,6 +64,7 @@ object PlanGen:
         )
       case Check.Tcp(target, every, limit) =>
         CheckDefinition(
+          None,
           None,
           target.some,
           GoDuration.render(every).some,

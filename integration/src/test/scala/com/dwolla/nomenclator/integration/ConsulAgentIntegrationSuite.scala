@@ -5,6 +5,7 @@ import com.comcast.ip4s.*
 import com.dwolla.nomenclator.consul.*
 import com.dwolla.nomenclator.consul.agent.*
 import com.dwolla.nomenclator.model.*
+import com.dwolla.nomenclator.plan.CheckComparison
 import com.dwolla.nomenclator.registration.*
 import munit.CatsEffectSuite
 import org.http4s.*
@@ -144,15 +145,51 @@ class ConsulAgentIntegrationSuite extends CatsEffectSuite:
       )
 
     agentFixture.test(
-      s"${version.label}: check definitions are reported only if the version is known to"
+      s"${version.label}: a check's type and timing are reported only if the version is known to"
     ): r =>
       for
         _ <- r.agent.register(registration("h:web:80", Some(httpCheck)))
+        _ <- r.agent.register(registration("h:db:81", Some(tcpCheck)))
         state <- r.agent.state
-      yield assertEquals(
-        checksOf(state, "h:web:80").flatMap(_.definition).nonEmpty,
-        version.reportsCheckDefinition
-      )
+      yield
+        assertEquals(
+          checksOf(state, "h:web:80").map(_.definition),
+          List(
+            Option.when(version.reportsCheckTiming)(
+              CheckDefinition(Some("http"), None, None, Some("5s"), Some("1s"))
+            )
+          )
+        )
+        assertEquals(
+          checksOf(state, "h:db:81").map(_.definition),
+          List(
+            Option.when(version.reportsCheckTiming)(
+              CheckDefinition(Some("tcp"), None, None, Some("7s"), None)
+            )
+          )
+        )
+
+    agentFixture.test(
+      s"${version.label}: the planner sees a changed interval only if the version reports timing"
+    ): r =>
+      val id = ServiceId("h:web:80")
+      for
+        _ <- r.agent.register(registration(id.value, Some(httpCheck)))
+        state <- r.agent.state
+      yield
+        val reported = CheckComparison.registrationChecks(state).get(id)
+        assert(CheckComparison.unchanged(Some(httpCheck), reported))
+        assertEquals(
+          CheckComparison.unchanged(
+            Some(
+              Check
+                .Http("http://10.0.0.1:32768/health", 6.seconds, Some(1.second))
+            ),
+            reported
+          ),
+          !version.reportsCheckTiming
+        )
+      end for
 
     agentFixture.test(s"${version.label}: no check registers no check"): r =>
       for

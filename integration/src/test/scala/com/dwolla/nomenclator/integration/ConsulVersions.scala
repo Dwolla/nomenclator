@@ -17,13 +17,13 @@ package com.dwolla.nomenclator.integration
   *   agent configuration (JSON, for `CONSUL_LOCAL_CONFIG`) that turns ACLs on
   *   with a default policy of deny and [[ConsulVersion.managementToken]] as the
   *   token that may do anything
-  * @param reportsCheckDefinition
-  *   whether `/v1/agent/checks` reports a service check's HTTP or TCP target
-  *   and interval in `Definition`. Neither version does: 1.0.6
-  *   returns `"Definition": {}` and 1.21 also returns `"Definition": {}`, while
-  *   adding top-level `Type`, `Interval`, and `Timeout` fields that the agent
-  *   client does not read. The planner therefore compares check definitions
-  *   with no agent that reports one.
+  * @param reportsCheckTiming
+  *   whether `/v1/agent/checks` reports a service check's type, interval, and
+  *   timeout. No version reports the HTTP URL or TCP target, and both return
+  *   `"Definition": {}`. 1.0.6 reports nothing more, so its
+  *   checks are judged by their presence; 1.21 adds top-level `Type`,
+  *   `Interval`, and `Timeout` fields (`""` when unset), which the planner
+  *   compares.
   * @param unknownDeregisterStatus
   *   the status the agent itself answers to deregistering a service ID it
   *   doesn't have, or none when it accepts it. The client treats 404 as
@@ -34,7 +34,7 @@ final case class ConsulVersion(
                                 image: String,
                                 platform: Option[String],
                                 aclConfig: String,
-                                reportsCheckDefinition: Boolean,
+                                reportsCheckTiming: Boolean,
                                 unknownDeregisterStatus: Option[Int]
 )
 
@@ -52,7 +52,7 @@ object ConsulVersions:
     image = "consul:1.0.6",
     platform = Some("linux/amd64"),
     aclConfig = s"""{"acl_datacenter":"dc1","acl_master_token":"$managementToken","acl_default_policy":"deny"}""",
-    reportsCheckDefinition = false,
+    reportsCheckTiming = false,
     unknownDeregisterStatus = None
   )
 
@@ -62,7 +62,7 @@ object ConsulVersions:
     platform = None,
     aclConfig =
       s"""{"acl":{"enabled":true,"default_policy":"deny","tokens":{"initial_management":"$managementToken"}}}""",
-    reportsCheckDefinition = false,
+    reportsCheckTiming = true,
     unknownDeregisterStatus = Some(404)
   )
 

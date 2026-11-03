@@ -69,6 +69,24 @@ class CheckComparisonSuite extends ScalaCheckSuite:
     assert(!matches(tcp, d.copy(timeout = Some("1s"))))
     assert(!matches(tcp, d.copy(timeout = Some("soon"))))
 
+  /** What Consul 1.21 reports outside `Definition`: the type and timing.
+    */
+  private def typeAndTiming(kind: String, interval: String, timeout: Option[String]) =
+    CheckDefinition(Some(kind), None, None, Some(interval), timeout)
+
+  test("an agent reporting only type and timing is judged on those"):
+    assert(matches(http, typeAndTiming("http", "10s", Some("2s"))))
+    assert(matches(tcp, typeAndTiming("tcp", "1m0s", None)))
+    assert(!matches(http, typeAndTiming("http", "11s", Some("2s"))))
+    assert(!matches(http, typeAndTiming("http", "10s", None)))
+    assert(!matches(tcp, typeAndTiming("tcp", "1m0s", Some("1s"))))
+
+  test("a reported type must be the check's"):
+    assert(!matches(http, typeAndTiming("tcp", "10s", Some("2s"))))
+    assert(!matches(tcp, typeAndTiming("http", "1m0s", None)))
+    assert(!matches(tcp, PlanGen.definitionOf(tcp).copy(kind = Some("http"))))
+    assert(matches(tcp, PlanGen.definitionOf(tcp).copy(kind = Some("tcp"))))
+
   private val id = ServiceId("h:web:80")
   private def agentCheck(d: Option[CheckDefinition]) =
     AgentCheck(PlanGen.registrationCheckId(id), Some(id), d)

@@ -38,19 +38,30 @@ object CheckComparison:
         reported.definition.forall(matches(check, _))
       case _ => false
 
-  /** The HTTP URL or TCP target must be equal as strings, and the other kind's
-    * target absent or empty (agents report unset fields as empty). Interval and
-    * timeout are compared as parsed Go durations; an absent desired timeout
-    * matches an absent or zero one.
+  /** A reported type must be the check's. The HTTP URL or TCP target must be
+    * equal as strings, and the other kind's target absent or empty (agents
+    * report unset fields as empty), unless the agent reports a type but neither
+    * target, as Consul 1.21 does: then the targets can't be compared, and the
+    * type and timing decide. Interval and timeout are compared as parsed Go
+    * durations; an absent desired timeout matches an absent or zero one.
     */
   def matches(check: Check, definition: CheckDefinition): Boolean =
     check match
       case Check.Http(url, interval, timeout) =>
-        definition.http.contains(url) && absent(definition.tcp) &&
+        definition.kind.forall(_ == "http") &&
+        target(definition, definition.http, url, definition.tcp) &&
         timing(interval, timeout, definition)
-      case Check.Tcp(target, interval, timeout) =>
-        definition.tcp.contains(target) && absent(definition.http) &&
+      case Check.Tcp(address, interval, timeout) =>
+        definition.kind.forall(_ == "tcp") &&
+        target(definition, definition.tcp, address, definition.http) &&
         timing(interval, timeout, definition)
+
+  private def target
+    (definition: CheckDefinition, reported: Option[String], expected: String, otherKind: Option[String]): Boolean =
+    val targetsUnreported =
+      definition.kind.isDefined && absent(definition.http) &&
+        absent(definition.tcp)
+    targetsUnreported || (reported.contains(expected) && absent(otherKind))
 
   private def absent(target: Option[String]): Boolean = target.forall(_.isEmpty)
 

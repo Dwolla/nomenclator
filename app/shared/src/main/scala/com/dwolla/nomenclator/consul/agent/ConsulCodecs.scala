@@ -11,8 +11,8 @@ import io.circe.syntax.*
 import scala.concurrent.duration.*
 
 /** The JSON Consul's agent API speaks. The decoders normalize what agents send:
-  * an empty `ServiceID`, a `null` `Tags`, and a missing, `null`, or zero-valued
-  * `Definition` all mean "nothing".
+  * an empty `ServiceID`, a `null` `Tags`, a missing, `null`, or zero-valued
+  * `Definition`, and empty top-level check fields all mean "nothing".
   */
 object ConsulCodecs:
 
@@ -74,7 +74,7 @@ object ConsulCodecs:
       .map(_.values.toList)
 
   /** A duration as Consul spells it: a Go duration string, or integer
-    * nanoseconds. Zero means unset.
+    * nanoseconds. Zero or empty means unset.
     */
   private val definitionDuration: Decoder[Option[String]] =
     Decoder
@@ -82,13 +82,15 @@ object ConsulCodecs:
         Decoder.decodeString
           .or(Decoder.decodeLong.map(nanos => GoDuration.render(nanos.nanos)))
       )
-      .map(_.filterNot(isZeroDuration))
+      .map(_.filterNot(s => s.isEmpty || isZeroDuration(s)))
 
   private def isZeroDuration(s: String): Boolean =
     GoDuration.parse(s).exists(_ == Duration.Zero)
 
   private def nonEmpty(s: Option[String]): Option[String] = s.filter(_.nonEmpty)
 
+  /** `Definition`, as agents that report one fill it in.
+    */
   private val checkDefinition: Decoder[Option[CheckDefinition]] =
     Decoder.instance: c =>
       (
@@ -96,23 +98,50 @@ object ConsulCodecs:
         c.getOrElse[Option[String]]("TCP")(None).map(nonEmpty),
         c.getOrElse[Option[String]]("Interval")(None)(using definitionDuration),
         c.getOrElse[Option[String]]("Timeout")(None)(using definitionDuration)
-      ).mapN(CheckDefinition.apply)
+      ).mapN(CheckDefinition(None, _, _, _, _))
         .map: d =>
           Option.when(
             d.http.isDefined || d.tcp.isDefined || d.interval.isDefined
           )(d)
+
+  /** The `Type`, `Interval`, and `Timeout` that Consul 1.21 reports beside the
+    * check rather than in `Definition`, with an empty string for an unset
+    * field.
+    */
+  private val typeAndTiming: Decoder[Option[CheckDefinition]] =
+    Decoder.instance: c =>
+      (
+        c.getOrElse[Option[String]]("Type")(None).map(nonEmpty),
+        c.getOrElse[Option[String]]("Interval")(None)(using definitionDuration),
+        c.getOrElse[Option[String]]("Timeout")(None)(using definitionDuration)
+      ).mapN((kind, interval, timeout) =>
+        Option.when(kind.isDefined || interval.isDefined)(
+          CheckDefinition(kind, None, None, interval, timeout)
+        )
+      )
+
+  /** Undecodable values leave that part of the definition unreported rather
+    * than failing the whole response: a foreign registration must not break a
+    * pass.
+    */
+  private def reportedDefinition(c: HCursor): Option[CheckDefinition] =
+    val fromDefinition = c
+      .downField("Definition")
+      .focus
+      .filterNot(_.isNull)
+      .flatMap(checkDefinition.decodeJson(_).toOption)
+      .flatten
+    val fromCheck = typeAndTiming(c).toOption.flatten
+    fromDefinition
+      .map(d => d.copy(kind = fromCheck.flatMap(_.kind)))
+      .orElse(fromCheck)
 
   private val agentCheck: Decoder[AgentCheck] = Decoder.instance: c =>
     (
       c.get[String]("CheckID"),
       c.getOrElse[Option[String]]("ServiceID")(None)
         .map(nonEmpty(_).map(ServiceId(_))),
-      c.downField("Definition")
-        .focus
-        .filterNot(_.isNull)
-        .flatMap(checkDefinition.decodeJson(_).toOption)
-        .flatten
-        .asRight[DecodingFailure]
+      reportedDefinition(c).asRight[DecodingFailure]
     ).mapN(AgentCheck.apply)
 
   /** `GET /v1/agent/checks`: a map keyed by check ID.

@@ -100,11 +100,53 @@ class ConsulCodecsSuite extends FunSuite:
           "service:h:web:80",
           Some(ServiceId("h:web:80")),
           Some(
-            CheckDefinition(Some("http://h/x"), None, Some("5s"), Some("1s"))
+            CheckDefinition(
+              None,
+              Some("http://h/x"),
+              None,
+              Some("5s"),
+              Some("1s")
+            )
           )
         )
       )
     )
+
+  test(
+    "Consul 1.21's top-level type and timing decode when Definition is empty"
+  ):
+    val checks = decodeChecks(json"""{
+      "service:h:web:80": {"CheckID":"service:h:web:80","ServiceID":"h:web:80",
+        "Type":"http","Interval":"1m30s","Timeout":"","Definition":{}},
+      "service:h:db:81": {"CheckID":"service:h:db:81","ServiceID":"h:db:81",
+        "Type":"tcp","Interval":"7s","Timeout":"2s","Definition":{}}
+    }""")
+    assertEquals(
+      checks.sortBy(_.checkId).map(_.definition),
+      List(
+        Some(CheckDefinition(Some("tcp"), None, None, Some("7s"), Some("2s"))),
+        Some(CheckDefinition(Some("http"), None, None, Some("1m30s"), None))
+      )
+    )
+
+  test("a reported Definition keeps its target and gains the top-level type"):
+    val checks = decodeChecks(json"""{
+      "c": {"CheckID":"c","ServiceID":"s","Type":"tcp","Interval":"9s",
+        "Definition":{"TCP":"h:80","Interval":"5s"}}
+    }""")
+    assertEquals(
+      checks.flatMap(_.definition),
+      List(CheckDefinition(Some("tcp"), None, Some("h:80"), Some("5s"), None))
+    )
+
+  test("empty top-level type and timing decode as no definition"):
+    val checks = decodeChecks(json"""{
+      "c": {"CheckID":"c","ServiceID":"s","Type":"","Interval":"",
+        "Timeout":"","Definition":{}},
+      "d": {"CheckID":"d","ServiceID":"s","Type":5,"Interval":[],
+        "Definition":{}}
+    }""")
+    assertEquals(checks.map(_.definition), List(None, None))
 
   test("an empty ServiceID decodes as no service"):
     val checks = decodeChecks(json"""{
@@ -132,7 +174,7 @@ class ConsulCodecsSuite extends FunSuite:
     }""")
     assertEquals(
       checks.flatMap(_.definition),
-      List(CheckDefinition(None, Some("h:80"), Some("5s"), Some("1.5s")))
+      List(CheckDefinition(None, None, Some("h:80"), Some("5s"), Some("1.5s")))
     )
 
   test(
