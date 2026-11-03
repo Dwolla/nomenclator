@@ -26,11 +26,12 @@ object ContainerCredentials:
     */
   private val taskRoleHost: Uri = uri"http://169.254.170.2"
 
-  /** Where to fetch task-role credentials, given the value of
-    * `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI`.
+  /** Where to fetch task-role credentials, given the path that
+    * `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` names. Only the path is replaced,
+    * so whatever it holds, the request goes to ECS's credentials host.
     */
-  def taskRoleEndpoint(relativeUri: String): Either[ParseFailure, Uri] =
-    Uri.fromString(taskRoleHost.renderString + relativeUri)
+  def taskRoleEndpoint(relativeUri: Uri.Path): Uri =
+    taskRoleHost.withPath(relativeUri)
 
   private val refreshBeforeExpiration = 5.minutes
   private val initialBackoff = 1.second

@@ -53,9 +53,19 @@ class ContainerCredentialsSuite extends CatsEffectSuite:
 
   test("the task-role endpoint is the relative URI on ECS's credentials host"):
     assertEquals(
-      ContainerCredentials.taskRoleEndpoint("/v2/credentials/example-id"),
-      Right(uri"http://169.254.170.2/v2/credentials/example-id")
+      ContainerCredentials.taskRoleEndpoint(path"/v2/credentials/example-id"),
+      uri"http://169.254.170.2/v2/credentials/example-id"
     )
+
+  test("the task-role endpoint stays on ECS's credentials host"):
+    List("//evil.com/x", "/@evil.com/x", "/.evil.com/x").foreach: p =>
+      assertEquals(
+        ContainerCredentials
+          .taskRoleEndpoint(Uri.Path.unsafeFromString(p))
+          .authority,
+        uri"http://169.254.170.2".authority,
+        p
+      )
 
   test("fetches from the credentials URI"):
     for

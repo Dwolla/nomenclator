@@ -23,7 +23,8 @@ import scala.concurrent.duration.*
   *   `NOMENCLATOR_ADDRESS`; otherwise the Consul agent's advertised address
   * @param credentialsRelativeUri
   *   `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI`, which ECS sets for a task with a
-  *   task role; preferred over `credentialsFullUri`
+  *   task role, as a path on ECS's credentials host; preferred over
+  *   `credentialsFullUri`
   * @param credentialsFullUri
   *   `AWS_CONTAINER_CREDENTIALS_FULL_URI`, the standard AWS variable for a
   *   credentials endpoint elsewhere, such as a local stand-in
@@ -45,7 +46,7 @@ final case class NomenclatorConfig(
                                     hostName: Option[HostName],
                                     address: Option[String],
                                     ecsAgent: Uri,
-                                    credentialsRelativeUri: Option[String],
+                                    credentialsRelativeUri: Option[Uri.Path],
                                     credentialsFullUri: Option[Uri],
                                     awsRegion: Option[AwsRegion],
                                     ecsEndpoint: Option[Uri]
@@ -106,7 +107,9 @@ object NomenclatorConfig:
       variable("NOMENCLATOR_ECS_AGENT_URL")
         .as(using url)
         .default(Http4sEcsAgentIntrospection.defaultBase),
-      variable("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI").option,
+      variable("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
+        .as(using absolutePath)
+        .option,
       variable("AWS_CONTAINER_CREDENTIALS_FULL_URI")
         .as(using credentialsUrl)
         .option,
@@ -186,6 +189,22 @@ object NomenclatorConfig:
         .toOption
         .filter(u => u.scheme.isDefined && u.host.exists(_.value.nonEmpty))
         .toRight(ConfigError.decode("a URL", key, value))
+
+  /** A path starting with `/`, and nothing else: no authority, query, or
+    * fragment. Anything more could move the request off the host it is meant
+    * for.
+    */
+  private val absolutePath: ConfigDecoder[String, Uri.Path] =
+    ConfigDecoder[String].mapEither: (key, value) =>
+      Uri
+        .fromString(value)
+        .toOption
+        .filter(u =>
+          value.startsWith("/") && u.scheme.isEmpty && u.authority.isEmpty &&
+            u.query.isEmpty && u.fragment.isEmpty
+        )
+        .map(_.path)
+        .toRight(ConfigError.decode("a URI path starting with /", key, value))
 
   /** As AWS SDKs allow it: HTTPS to any host, but plain HTTP only to this host
     * or to the addresses ECS and EKS serve credentials on, so that credentials

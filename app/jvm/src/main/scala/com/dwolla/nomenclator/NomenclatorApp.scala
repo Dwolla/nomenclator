@@ -169,20 +169,12 @@ object NomenclatorApp:
     */
   def credentialsEndpoint(config: NomenclatorConfig): Either[StartupError, Uri] =
     config.credentialsRelativeUri
-      .map(relativeUri =>
-        ContainerCredentials
-          .taskRoleEndpoint(relativeUri)
-          .leftMap(_ =>
-            StartupError(
-              "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI is not a URI path"
-            )
-          )
-      )
-      .orElse(config.credentialsFullUri.map(_.asRight))
-      .getOrElse(
+      .map(ContainerCredentials.taskRoleEndpoint)
+      .orElse(config.credentialsFullUri)
+      .toRight(
         StartupError(
           "Neither AWS_CONTAINER_CREDENTIALS_RELATIVE_URI nor AWS_CONTAINER_CREDENTIALS_FULL_URI is set, so there are no credentials for the ECS API; give the task a task role"
-        ).asLeft
+        )
       )
 
   /** Logs the effective configuration, the Consul token redacted.

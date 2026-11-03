@@ -166,13 +166,33 @@ class NomenclatorConfigSuite extends CatsEffectSuite:
       "NOMENCLATOR_ECS_AGENT_URL" -> "http://127.0.0.1:9913"
     ).map: config =>
       assertEquals(config.awsRegion, Some(AwsRegion("us-west-2")))
-      assertEquals(config.credentialsRelativeUri, Some("/v2/credentials/abc"))
+      assertEquals(
+        config.credentialsRelativeUri,
+        Some(path"/v2/credentials/abc")
+      )
       assertEquals(
         config.credentialsFullUri,
         Some(uri"http://127.0.0.1:9911/creds")
       )
       assertEquals(config.ecsEndpoint, Some(uri"http://127.0.0.1:9912"))
       assertEquals(config.ecsAgent, uri"http://127.0.0.1:9913")
+
+  // Each would move the request off ECS's credentials host if it were
+  // appended to it as text.
+  List(
+    ".evil.com/x",
+    "@evil.com/x",
+    "//evil.com/x",
+    ":8080/x",
+    "v2/credentials/abc",
+    "/v2/credentials/abc?x=1",
+    "/v2/credentials/abc#x",
+    ""
+  ).foreach: refused =>
+    test(s"AWS_CONTAINER_CREDENTIALS_RELATIVE_URI may not be '$refused'"):
+      assertFailsNaming("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI" -> refused)(
+        "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"
+      )
 
   List(
     "http://127.0.0.1:9911/creds",
