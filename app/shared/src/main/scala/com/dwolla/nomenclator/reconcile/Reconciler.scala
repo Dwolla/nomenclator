@@ -107,6 +107,7 @@ object Reconciler:
     def run: F[PassOutcome] =
       for
         tasks <- read(Dependency.EcsAgent, intro.tasks)
+        _ <- defs.retainOnly(tasks.map(_.definition).toSet)
         running = tasks.filter(_.isRunning)
         settings <- definitions(running)
         desired = Registrations.desired(host, tasks, settings, globalTags)

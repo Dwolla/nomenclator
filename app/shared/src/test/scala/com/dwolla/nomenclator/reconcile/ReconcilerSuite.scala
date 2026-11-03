@@ -407,6 +407,24 @@ class ReconcilerSuite extends CatsEffectSuite:
           logged.toString
         )
 
+  test(
+    "each pass keeps only the cached definitions of the tasks the agent reports"
+  ):
+    val stopping = bar.copy(desiredStatus = TaskStatus.Stopped)
+    val program = for
+      w <- world(List(foo, stopping), Map(fooRef -> plain))
+      _ <- passes(w, 3)(i =>
+        w.ecs.fail(introspectionDown).whenA(i == 0) >>
+          w.ecs.setTasks(List(foo)).whenA(i == 1)
+      )
+      retained <- w.defs.retained
+    yield retained
+
+    // The failed read in the second pass forgets nothing.
+    TestControl
+      .executeEmbed(program)
+      .map(assertEquals(_, Vector(Set(fooRef, barRef), Set(fooRef))))
+
   test("definitions are looked up only for running tasks"):
     val stopping = bar.copy(desiredStatus = TaskStatus.Stopped)
     val program = for

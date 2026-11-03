@@ -85,6 +85,22 @@ class CachedTaskDefinitionsSuite extends CatsEffectSuite:
       seen <- requests.get
     yield assertEquals(seen.reverse, List("foo-service:7", "foo-service:8"))
 
+  test("retainOnly forgets every other ref, which is fetched again"):
+    val other = ref.copy(revision = 8)
+    for
+      (requests, ecs) <- countingEcs(List(described("foo-service").pure[IO]))
+      defs <- CachedTaskDefinitions(ecs, ignoreLookups)
+      _ <- defs.settings(ref)
+      _ <- defs.settings(other)
+      _ <- defs.retainOnly(Set(ref))
+      _ <- defs.settings(ref)
+      _ <- defs.settings(other)
+      seen <- requests.get
+    yield assertEquals(
+      seen.reverse,
+      List("foo-service:7", "foo-service:8", "foo-service:8")
+    )
+
   test("a failed call is not cached and its error reaches the caller"):
     val boom = new RuntimeException("ecs unavailable")
     for

@@ -10,8 +10,9 @@ import com.dwolla.nomenclator.settings.ContainerSettings
 
 object CachedTaskDefinitions:
 
-  /** Task definition revisions are immutable, so successes are cached forever.
-    * Failures are never cached and propagate to the caller.
+  /** Task definition revisions are immutable, so successes are cached until
+    * [[TaskDefinitions.retainOnly]] drops them. Failures are never cached and
+    * propagate to the caller.
     *
     * Concurrent misses for the same ref may each call ECS; the answers are
     * identical, so single-flight machinery isn't worth it.
@@ -36,6 +37,9 @@ object CachedTaskDefinitions:
                     onLookup(LookupResult.Failed)
               )(cached => onLookup(LookupResult.Cached).as(cached))
             )
+
+          override def retainOnly(refs: Set[TaskDefinitionRef]): F[Unit] =
+            cache.update(_.view.filterKeys(refs).toMap)
 
           private def describe(ref: TaskDefinitionRef): F[Map[ContainerName, ContainerSettings]] =
             for
