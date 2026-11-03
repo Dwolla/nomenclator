@@ -17,6 +17,10 @@ val otel4sSmithy4sVersion = "0.1.4"
 // testing module is pinned to it.
 val openTelemetryJavaVersion = "1.67.0"
 val testcontainersScalaVersion = "0.44.1"
+val cirisVersion = "3.15.2"
+val logbackVersion = "1.5.23"
+// The slf4j-api version Logback resolves; the JUL bridge must match it.
+val slf4jVersion = "2.0.17"
 
 ThisBuild / organization := "com.dwolla"
 ThisBuild / tlBaseVersion := "0.1"
@@ -42,9 +46,7 @@ val integrationTestDependencies = Seq(
   "org.typelevel" %% "munit-cats-effect" % munitCatsEffectVersion,
   "org.typelevel" %% "cats-effect-testkit" % catsEffectVersion,
   "com.dimafeng" %% "testcontainers-scala-munit" % testcontainersScalaVersion,
-  "org.http4s" %% "http4s-ember-server" % http4sVersion,
-  // testcontainers logs through slf4j 1.x, which warns on stderr without a binding.
-  "org.slf4j" % "slf4j-nop" % "1.7.36"
+  "org.http4s" %% "http4s-ember-server" % http4sVersion
 ).map(_ % Test)
 
 lazy val root = tlCrossRootProject
@@ -66,10 +68,12 @@ lazy val core = crossProject(JVMPlatform)
 lazy val app = crossProject(JVMPlatform)
   .crossType(CrossType.Full)
   .in(file("app"))
-  .enablePlugins(Smithy4sCodegenPlugin, NoPublishPlugin)
+  .enablePlugins(Smithy4sCodegenPlugin, BuildInfoPlugin, NoPublishPlugin)
   .dependsOn(core % "compile->compile;test->test")
   .settings(
     name := "nomenclator-app",
+    buildInfoKeys := Seq[BuildInfoKey](version),
+    buildInfoPackage := "com.dwolla.nomenclator",
     // Smithy sources are shared across platforms, so they live under app/shared.
     Compile / smithy4sInputDirs := Seq(
       (ThisBuild / baseDirectory).value / "app" / "shared" / "src" / "main" / "smithy"
@@ -80,6 +84,7 @@ lazy val app = crossProject(JVMPlatform)
       "org.http4s" %%% "http4s-ember-client" % http4sVersion,
       "org.http4s" %%% "http4s-circe" % http4sVersion,
       "org.typelevel" %%% "log4cats-core" % log4catsVersion,
+      "is.cir" %%% "ciris" % cirisVersion,
       "org.typelevel" %%% "otel4s-core-trace" % otel4sVersion,
       "org.typelevel" %%% "otel4s-core-metrics" % otel4sVersion,
       "com.dwolla" %%% "otel4s-tagless" % otel4sTaglessVersion,
@@ -97,9 +102,15 @@ lazy val app = crossProject(JVMPlatform)
       "com.dwolla" %% "dwolla-otel4s-oteljava" % dwollaOtel4sVersion,
       "com.dwolla" %% "dwolla-otel4s-oteljava-aws-ecs" % dwollaOtel4sVersion,
       "org.typelevel" %% "otel4s-instrumentation-metrics" % otel4sVersion,
+      "org.typelevel" %% "log4cats-slf4j" % log4catsVersion,
+      // The OpenTelemetry Java SDK logs its own problems through JUL.
+      "org.slf4j" % "jul-to-slf4j" % slf4jVersion,
+      "ch.qos.logback" % "logback-classic" % logbackVersion % Runtime,
       "org.typelevel" %% "otel4s-oteljava-testkit" % otel4sVersion % Test,
       "io.opentelemetry" % "opentelemetry-sdk-testing" % openTelemetryJavaVersion % Test
-    )
+    ),
+    // A forked JVM gets its own system properties, logging, and signals.
+    run / fork := true
   )
 
 lazy val integration = project

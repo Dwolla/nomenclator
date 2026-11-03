@@ -24,7 +24,13 @@ object ContainerCredentials:
 
   /** Where the ECS agent serves task-role credentials.
     */
-  val defaultBase: Uri = uri"http://169.254.170.2"
+  private val taskRoleHost: Uri = uri"http://169.254.170.2"
+
+  /** Where to fetch task-role credentials, given the value of
+    * `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI`.
+    */
+  def taskRoleEndpoint(relativeUri: String): Either[ParseFailure, Uri] =
+    Uri.fromString(taskRoleHost.renderString + relativeUri)
 
   private val refreshBeforeExpiration = 5.minutes
   private val initialBackoff = 1.second
@@ -70,33 +76,27 @@ object ContainerCredentials:
     * returned effect only reads the latest good credentials, and refresh
     * failures are retried forever with capped exponential backoff.
     *
-    * @param relativeUri
-    *   the value of `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI`
+    * @param credentialsUri
+    *   the endpoint to fetch from: the [[taskRoleEndpoint]] for a relative URI,
+    *   or the value of `AWS_CONTAINER_CREDENTIALS_FULL_URI`
     */
-  def resource[F[_]: Temporal](
-                                client: Client[F],
-                                relativeUri: String,
-                                logger: Logger[F],
-                                base: Uri = defaultBase
-  ): Resource[F, F[AwsCredentials]] =
+  def resource[F[_]: Temporal]
+    (client: Client[F], credentialsUri: Uri, logger: Logger[F]): Resource[F, F[AwsCredentials]] =
     def fetch: F[Fetched] =
-      (for
-        uri <- Uri.fromString(base.renderString + relativeUri).liftTo[F]
-        fetched <- client
-          .run(Request[F](Method.GET, uri))
-          .use: response =>
-            if (response.status.isSuccess)
-              // The body holds the secret, so decoding failures must not echo it.
-              response.as[Fetched](using
-                summon,
-                jsonOfSensitive[F, Fetched](_ => "<redacted>")
-              )
-            else
-              response.body.compile.drain >>
-                ContainerCredentialsError(
-                  s"endpoint answered with status ${response.status.code}"
-                ).raiseError[F, Fetched]
-      yield fetched)
+      client
+        .run(Request[F](Method.GET, credentialsUri))
+        .use: response =>
+          if (response.status.isSuccess)
+            // The body holds the secret, so decoding failures must not echo it.
+            response.as[Fetched](using
+              summon,
+              jsonOfSensitive[F, Fetched](_ => "<redacted>")
+            )
+          else
+            response.body.compile.drain >>
+              ContainerCredentialsError(
+                s"endpoint answered with status ${response.status.code}"
+              ).raiseError[F, Fetched]
         .timeout(fetchTimeout)
         .adaptError:
           case _: MalformedMessageBodyFailure | _: InvalidMessageBodyFailure =>

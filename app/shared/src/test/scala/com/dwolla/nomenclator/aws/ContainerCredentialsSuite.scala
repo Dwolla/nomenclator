@@ -15,8 +15,8 @@ import java.time.Instant
 import scala.concurrent.duration.*
 
 class ContainerCredentialsSuite extends CatsEffectSuite:
-  private val relativeUri = "/v2/credentials/example-id"
-  private val base = uri"http://credentials.invalid"
+  private val credentialsUri =
+    uri"http://credentials.invalid/v2/credentials/example-id"
 
   private def secretFor(call: Int) = s"secret-example-$call"
 
@@ -51,12 +51,18 @@ class ContainerCredentialsSuite extends CatsEffectSuite:
   private def accessKey(credentials: IO[smithy4s.aws.AwsCredentials]) =
     credentials.map(_.accessKeyId)
 
-  test("fetches from the task-role endpoint's relative URI"):
+  test("the task-role endpoint is the relative URI on ECS's credentials host"):
+    assertEquals(
+      ContainerCredentials.taskRoleEndpoint("/v2/credentials/example-id"),
+      Right(uri"http://169.254.170.2/v2/credentials/example-id")
+    )
+
+  test("fetches from the credentials URI"):
     for
       (_, uris, client) <- endpoint(Set.empty)
       logger = StructuredTestingLogger.impl[IO]()
       key <- ContainerCredentials
-        .resource[IO](client, relativeUri, logger, base)
+        .resource[IO](client, credentialsUri, logger)
         .use(accessKey)
       seen <- uris.get
     yield
@@ -71,7 +77,7 @@ class ContainerCredentialsSuite extends CatsEffectSuite:
       (_, _, client) <- endpoint(Set(1))
       logger = StructuredTestingLogger.impl[IO]()
       result <- ContainerCredentials
-        .resource[IO](client, relativeUri, logger, base)
+        .resource[IO](client, credentialsUri, logger)
         .use(_ => IO.unit)
         .attempt
     yield assert(result.isLeft)
@@ -81,7 +87,7 @@ class ContainerCredentialsSuite extends CatsEffectSuite:
       (calls, _, client) <- endpoint(Set.empty)
       logger = StructuredTestingLogger.impl[IO]()
       result <- ContainerCredentials
-        .resource[IO](client, relativeUri, logger, base)
+        .resource[IO](client, credentialsUri, logger)
         .use: credentials =>
           for
             before <- IO.sleep(55.minutes - 1.second) >> (
@@ -109,7 +115,7 @@ class ContainerCredentialsSuite extends CatsEffectSuite:
       (calls, _, client) <- endpoint(Set(2, 3, 4))
       logger = StructuredTestingLogger.impl[IO]()
       result <- ContainerCredentials
-        .resource[IO](client, relativeUri, logger, base)
+        .resource[IO](client, credentialsUri, logger)
         .use: credentials =>
           for
             failing <- IO.sleep(55.minutes + 6.seconds) >>
@@ -145,7 +151,7 @@ class ContainerCredentialsSuite extends CatsEffectSuite:
       (calls, _, client) <- endpoint(Set.from(2 to 1000))
       logger = StructuredTestingLogger.impl[IO]()
       result <- ContainerCredentials
-        .resource[IO](client, relativeUri, logger, base)
+        .resource[IO](client, credentialsUri, logger)
         .use: credentials =>
           for
             // Calls 2..7 fall at 0, 1, 3, 7, 15, and 31 seconds after the
@@ -186,9 +192,8 @@ class ContainerCredentialsSuite extends CatsEffectSuite:
     ContainerCredentials
       .resource[IO](
         client,
-        relativeUri,
-        StructuredTestingLogger.impl[IO](),
-        base
+        credentialsUri,
+        StructuredTestingLogger.impl[IO]()
       )
       .use(_ => IO.unit)
       .attempt
@@ -222,7 +227,7 @@ class ContainerCredentialsSuite extends CatsEffectSuite:
       )
       logger = StructuredTestingLogger.impl[IO]()
       result <- ContainerCredentials
-        .resource[IO](client, relativeUri, logger, base)
+        .resource[IO](client, credentialsUri, logger)
         .use: _ =>
           for
             before <- IO.sleep(1.hour - 1.second) >> calls.get
@@ -242,7 +247,7 @@ class ContainerCredentialsSuite extends CatsEffectSuite:
       (calls, _, client) <- endpoint(Set.empty, hangingCalls = Set(2))
       logger = StructuredTestingLogger.impl[IO]()
       result <- ContainerCredentials
-        .resource[IO](client, relativeUri, logger, base)
+        .resource[IO](client, credentialsUri, logger)
         .use: credentials =>
           for
             hung <- IO.sleep(55.minutes + 5.seconds) >> accessKey(credentials)
@@ -272,7 +277,7 @@ class ContainerCredentialsSuite extends CatsEffectSuite:
       (_, _, client) <- endpoint(Set.from(2 to 15))
       logger = StructuredTestingLogger.impl[IO]()
       result <- ContainerCredentials
-        .resource[IO](client, relativeUri, logger, base)
+        .resource[IO](client, credentialsUri, logger)
         .use: credentials =>
           for
             beforeExpiry <- IO.sleep(55.minutes + 4.minutes) >> errorsAndInfos(
@@ -302,7 +307,7 @@ class ContainerCredentialsSuite extends CatsEffectSuite:
       (_, _, client) <- endpoint(Set.from(2 to 1000))
       logger = StructuredTestingLogger.impl[IO]()
       _ <- ContainerCredentials
-        .resource[IO](client, relativeUri, logger, base)
+        .resource[IO](client, credentialsUri, logger)
         .use(_ => IO.sleep(70.minutes))
       logged <- logger.logged
     yield logged
@@ -323,7 +328,7 @@ class ContainerCredentialsSuite extends CatsEffectSuite:
       (_, _, client) <- endpoint(Set(2))
       logger = StructuredTestingLogger.impl[IO]()
       rendered <- ContainerCredentials
-        .resource[IO](client, relativeUri, logger, base)
+        .resource[IO](client, credentialsUri, logger)
         .use(credentials => IO.sleep(56.minutes) >> credentials.map(_.toString))
       logged <- logger.logged
     yield (rendered, logged.map(_.toString).mkString("\n"))
