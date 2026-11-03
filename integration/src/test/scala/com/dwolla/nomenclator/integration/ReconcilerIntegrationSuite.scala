@@ -34,6 +34,7 @@ class ReconcilerIntegrationSuite extends CatsEffectSuite:
 
   private val fooRef = TaskDefinitionRef("foo-service", 3)
   private val barRef = TaskDefinitionRef("bar-worker", 12)
+  private val bazRef = TaskDefinitionRef("baz-api", 7)
   private val barTask =
     "arn:aws:ecs:us-east-1:123456789012:task/example/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
@@ -70,9 +71,17 @@ class ReconcilerIntegrationSuite extends CatsEffectSuite:
       Map.empty
     )
   )
+  // baz-api runs in awsvpc mode, so it registers nothing whatever it asks.
+  private val bazSettings = Map(
+    ContainerName("api") -> ContainerSettings.fromRaw(
+      Map("SERVICE_CHECK_HTTP" -> "/health"),
+      Map.empty
+    )
+  )
   private val definitions = Map(
     fooRef -> fooSettings,
-    barRef -> Map.empty[ContainerName, ContainerSettings]
+    barRef -> Map.empty[ContainerName, ContainerSettings],
+    bazRef -> bazSettings
   )
 
   private final case class Running(ecs: FakeEcsAgent, introspection: EcsAgentIntrospection[IO], consul: ConsulAgent[IO])
@@ -200,7 +209,7 @@ class ReconcilerIntegrationSuite extends CatsEffectSuite:
       for
         _ <- passes(r, definitions, 1)()
         // The next run can't look up bar-worker's definition.
-        reports <- passes(r, Map(fooRef -> fooSettings), 2)()
+        reports <- passes(r, definitions - barRef, 2)()
         registered <- services(r)
       yield
         assertEveryPassSucceeded(reports)

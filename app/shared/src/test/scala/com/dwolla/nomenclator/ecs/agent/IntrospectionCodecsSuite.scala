@@ -135,6 +135,55 @@ class IntrospectionCodecsSuite extends FunSuite:
       List((8081, 32768, Protocol.Tcp))
     )
 
+  private def withNetworks(networks: Json): Json =
+    container(
+      "web",
+      json"""[{"ContainerPort":8080,"Protocol":"tcp","HostPort":8080}]"""
+    )
+      .deepMerge(Json.obj("Networks" -> networks))
+
+  private def decodeContainer(c: Json) =
+    decode(task(containers = Json.arr(c))).map(_.flatMap(_.containers))
+
+  // In awsvpc mode the container listens on its own ENI, and the agent reports
+  // HostPort = ContainerPort though nothing listens on the host there.
+  test("an awsvpc container's bindings are dropped"):
+    assertEquals(
+      decodeContainer(
+        withNetworks(
+          json"""[{"NetworkMode":"awsvpc","IPv4Addresses":["10.0.1.5"]}]"""
+        )
+      ).map(_.map(_.ports)),
+      Right(List(Nil))
+    )
+
+  test(
+    "a container whose Networks is null or names another mode keeps its bindings"
+  ):
+    List(
+      json"null",
+      json"[]",
+      json"""[{"NetworkMode":"bridge","IPv4Addresses":["172.17.0.2"]}]"""
+    ).foreach: networks =>
+      assertEquals(
+        decodeContainer(withNetworks(networks)).map(_.flatMap(_.ports).size),
+        Right(1),
+        s"Networks: $networks"
+      )
+
+  test("malformed Networks fail the decode"):
+    List(
+      json""""awsvpc"""",
+      json"""["awsvpc"]""",
+      json"""[{"IPv4Addresses":["10.0.1.5"]}]""",
+      json"""[{"NetworkMode":null}]""",
+      json"""[{"NetworkMode":5}]"""
+    ).foreach: networks =>
+      assert(
+        decodeContainer(withNetworks(networks)).isLeft,
+        s"expected $networks to fail"
+      )
+
   test("unmapped statuses become Other and never fail decoding"):
     val tasks = decode(task(known = "DEPROVISIONING", desired = ""))
       .fold(throw _, identity)

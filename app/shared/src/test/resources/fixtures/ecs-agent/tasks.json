@@ -65,6 +65,31 @@
           ]
         }
       ]
+    },
+    {
+      "Arn": "arn:aws:ecs:us-east-1:123456789012:task/example/dddddddddddddddddddddddddddddddd",
+      "DesiredStatus": "RUNNING",
+      "KnownStatus": "RUNNING",
+      "Family": "baz-api",
+      "Version": "7",
+      "Containers": [
+        {
+          "DockerId": "5555555555555555555555555555555555555555555555555555555555555555",
+          "DockerName": "ecs-baz-api-7-api-c1d2e3f4a5b6c7d8e9f0",
+          "Name": "api",
+          "Image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/baz-api:7.0.0",
+          "ImageID": "sha256:2ae34eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "Ports": [
+            { "ContainerPort": 8080, "Protocol": "tcp", "HostPort": 8080 }
+          ],
+          "Networks": [
+            {
+              "NetworkMode": "awsvpc",
+              "IPv4Addresses": ["10.0.1.5"]
+            }
+          ]
+        }
+      ]
     }
   ]
 }

@@ -106,10 +106,28 @@ class Http4sEcsAgentIntrospectionSuite extends CatsEffectSuite:
           List(binding(8080, 32769, Protocol.Tcp))
         )
       )
+    ),
+    EcsTask(
+      "arn:aws:ecs:us-east-1:123456789012:task/example/dddddddddddddddddddddddddddddddd",
+      TaskDefinitionRef("baz-api", 7),
+      TaskStatus.Running,
+      TaskStatus.Running,
+      List(
+        EcsContainer(
+          ContainerName("api"),
+          DockerName("ecs-baz-api-7-api-c1d2e3f4a5b6c7d8e9f0"),
+          ImageName(
+            "123456789012.dkr.ecr.us-east-1.amazonaws.com/baz-api:7.0.0"
+          ),
+          Nil
+        )
+      )
     )
   )
 
-  test("tasks.json decodes, with the duplicate binding collapsed"):
+  test(
+    "tasks.json decodes, with the duplicate binding collapsed and the awsvpc container's bindings dropped"
+  ):
     stubClient(json(fixture("tasks.json"))).flatMap:
       case (seen, client) =>
         Http4sEcsAgentIntrospection(client, base).tasks.flatMap: tasks =>
@@ -125,7 +143,8 @@ class Http4sEcsAgentIntrospectionSuite extends CatsEffectSuite:
             List(
               TaskDefinitionRef("foo-service", 3),
               TaskDefinitionRef("bar-worker", 12),
-              TaskDefinitionRef("foo-service", 2)
+              TaskDefinitionRef("foo-service", 2),
+              TaskDefinitionRef("baz-api", 7)
             )
           )
         )

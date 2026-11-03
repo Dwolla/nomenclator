@@ -9,7 +9,7 @@ import io.circe.*
   * task fails the whole decode: a partial task list must never look like a
   * complete one, because the reconciler deregisters whatever it doesn't see.
   * Port bindings are the exception, since the agent reports bindings that can't
-  * be registered (see [[portBindings]]).
+  * be registered (see [[portBindings]] and [[isAwsvpc]]).
   */
 object IntrospectionCodecs:
 
@@ -88,12 +88,27 @@ object IntrospectionCodecs:
   private def port[A](value: Long)(from: Int => Either[String, A]): Option[A] =
     Option.when(value.isValidInt)(value.toInt).flatMap(from(_).toOption)
 
+  private val networkMode: Decoder[String] =
+    Decoder.instance(_.get[String]("NetworkMode"))
+
+  /** The agent reports `Networks` only for awsvpc containers, which listen on
+    * their own network interface. It still reports their ports, with the host
+    * port equal to the container port, but nothing listens on the host there,
+    * and registrator, seeing no published ports, registered nothing. A
+    * `Networks` that is present but malformed fails the decode, so an awsvpc
+    * container can't be mistaken for one that publishes its ports.
+    */
+  private def isAwsvpc(c: HCursor): Decoder.Result[Boolean] =
+    c.getOrElse[Option[List[String]]]("Networks")(None)(using
+      Decoder.decodeOption(using Decoder.decodeList(using networkMode))
+    ).map(_.getOrElse(Nil).exists(_.equalsIgnoreCase("awsvpc")))
+
   private val container: Decoder[EcsContainer] = Decoder.instance: c =>
     (
       c.get[String]("Name").map(ContainerName(_)),
       c.get[String]("DockerName").map(dockerName),
       c.get[String]("Image").map(ImageName(_)),
-      portBindings(c)
+      (portBindings(c), isAwsvpc(c)).mapN((ports, awsvpc) => if (awsvpc) Nil else ports)
     ).mapN(EcsContainer.apply)
 
   private val task: Decoder[EcsTask] = Decoder.instance: c =>
