@@ -113,7 +113,22 @@ lazy val app = crossProject(JVMPlatform)
       "io.opentelemetry" % "opentelemetry-sdk-testing" % openTelemetryJavaVersion % Test
     ),
     // A forked JVM gets its own system properties, logging, and signals.
-    run / fork := true
+    run / fork := true,
+    assembly / assemblyJarName := "nomenclator.jar",
+    assembly / mainClass := Some("com.dwolla.nomenclator.Main"),
+    assembly / assemblyMergeStrategy := {
+      case "module-info.class"                                      => MergeStrategy.discard
+      case PathList("META-INF", "versions", _, "module-info.class") =>
+        MergeStrategy.discard
+      // Codegen-time manifests that clash between smithy4s jars; nothing reads
+      // them at runtime.
+      case PathList("META-INF", "smithy", _*) => MergeStrategy.discard
+      // OSGi metadata that more than one dependency ships; a plain jar on the
+      // classpath never reads it.
+      case PathList("META-INF", "versions", _, "OSGI-INF", "MANIFEST.MF") =>
+        MergeStrategy.discard
+      case x => (assembly / assemblyMergeStrategy).value(x)
+    }
   )
 
 lazy val integration = project
