@@ -8,6 +8,7 @@ import com.dwolla.nomenclator.ecs.TaskDefinitionRef
 import com.dwolla.nomenclator.ecs.agent.*
 import com.dwolla.nomenclator.ecs.api.*
 import com.dwolla.nomenclator.model.*
+import com.dwolla.nomenclator.plan.Plan
 import com.dwolla.nomenclator.reconcile.*
 import com.dwolla.nomenclator.registration.*
 import com.dwolla.nomenclator.settings.ContainerSettings
@@ -47,11 +48,14 @@ class ReconcilerIntegrationSuite extends CatsEffectSuite:
       "test-host:ecs-bar-worker-12-worker-0a1b2c3d4e5f6a7b8c9d:9001:udp"
     )
 
+  // An empty and a duplicate tag: registrator sends them as they are.
+  private val fooTags = List(Tag("a"), Tag(""), Tag("a"))
+
   private val fixtureServices = List(
     AgentService(
       fooWeb,
       ServiceName("foo-service"),
-      List(Tag("web")),
+      fooTags,
       address,
       32768
     ),
@@ -65,9 +69,22 @@ class ReconcilerIntegrationSuite extends CatsEffectSuite:
     )
   )
 
+  private val fooEnvironment = Map(
+    "SERVICE_TAGS" -> "a,,a",
+    "SERVICE_CHECK_HTTP" -> "/health",
+    "SERVICE_CHECK_INTERVAL" -> "1m30s",
+    "SERVICE_CHECK_TIMEOUT" -> "2s"
+  )
   private val fooSettings = Map(
-    ContainerName("web") -> ContainerSettings.fromRaw(
-      Map("SERVICE_TAGS" -> "web", "SERVICE_CHECK_TCP" -> "true"),
+    ContainerName("web") -> ContainerSettings.fromRaw(fooEnvironment, Map.empty)
+  )
+  // The TCP port is checked; the UDP port isn't.
+  private val barSettings = Map(
+    ContainerName("worker") -> ContainerSettings.fromRaw(
+      Map(
+        "SERVICE_9000_CHECK_TCP" -> "true",
+        "SERVICE_9000_CHECK_INTERVAL" -> "7s"
+      ),
       Map.empty
     )
   )
@@ -80,7 +97,7 @@ class ReconcilerIntegrationSuite extends CatsEffectSuite:
   )
   private val definitions = Map(
     fooRef -> fooSettings,
-    barRef -> Map.empty[ContainerName, ContainerSettings],
+    barRef -> barSettings,
     bazRef -> bazSettings
   )
 
@@ -160,8 +177,58 @@ class ReconcilerIntegrationSuite extends CatsEffectSuite:
         assertEveryPassSucceeded(reports)
         assertEquals(registered, fixtureServices.sortBy(_.id.value))
         assertEquals(
-          state.checks.filter(_.serviceId.contains(fooWeb)).map(_.checkId),
-          List(s"service:${fooWeb.value}")
+          state.checks
+            .filter(_.serviceId.exists(Set(fooWeb, barTcp, barUdp)))
+            .map(_.checkId)
+            .sorted,
+          List(s"service:${barTcp.value}", s"service:${fooWeb.value}")
+        )
+
+    fixture.test(
+      s"${version.label}: after the first pass, passes plan nothing"
+    ): r =>
+      passes(r, definitions, 3)().map: reports =>
+        assertEveryPassSucceeded(reports)
+        assertEquals(
+          reports.map(_.outcome.map(_.plan.register.map(_.id).toSet)),
+          List(
+            Right(fixtureServices.map(_.id).toSet),
+            Right(Set.empty),
+            Right(Set.empty)
+          )
+        )
+        assertEquals(
+          reports.drop(1).map(_.outcome.map(_.plan)),
+          List.fill(2)(Right(Plan(Nil, Nil)))
+        )
+
+    // A changed definition can't keep its revision on a real host, but it is
+    // the way to make the agent's service lose its check under the same ID.
+    fixture.test(
+      s"${version.label}: a check removed from the definition is replaced, then nothing is planned"
+    ): r =>
+      val withoutCheck = definitions.updated(
+        fooRef,
+        Map(
+          ContainerName("web") -> ContainerSettings.fromRaw(
+            Map("SERVICE_TAGS" -> "a,,a"),
+            Map.empty
+          )
+        )
+      )
+      for
+        _ <- passes(r, definitions, 1)()
+        reports <- passes(r, withoutCheck, 2)()
+        state <- r.consul.state
+      yield
+        assertEveryPassSucceeded(reports)
+        assertEquals(
+          reports.map(_.outcome.map(_.writes.map(w => (w.kind, w.id)))),
+          List(Right(List((ChangeKind.Replace, fooWeb))), Right(Nil))
+        )
+        assertEquals(
+          state.checks.filter(_.serviceId.contains(fooWeb)),
+          Nil
         )
 
     fixture.test(

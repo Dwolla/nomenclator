@@ -4,6 +4,11 @@ package com.dwolla.nomenclator.integration
   * does differently. Every field below was observed against the real agent in
   * `ConsulAgentIntegrationSuite`, not taken from documentation.
   *
+  * What every version does alike: tags are stored and reported verbatim, an
+  * empty tag and a duplicate included (`["a","","a"]` comes back as sent), so
+  * the planner compares tags as registrator sends them and its plan converges;
+  * `ReconcilerIntegrationSuite` pins this.
+  *
   * @param image
   *   the container image of a dev-mode agent
   * @param platform
