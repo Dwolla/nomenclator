@@ -25,10 +25,7 @@ object Registrations:
                settings: Map[TaskDefinitionRef, Map[ContainerName, ContainerSettings]],
                globalTags: List[Tag]
   ): Desired =
-    val running = tasks.filter(task =>
-      task.knownStatus == TaskStatus.Running &&
-        task.desiredStatus == TaskStatus.Running
-    )
+    val running = tasks.filter(_.isRunning)
     val (awaiting, known) = running.partitionMap: task =>
       settings
         .get(task.definition)

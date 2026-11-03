@@ -2,7 +2,6 @@ package com.dwolla.nomenclator.integration
 
 import cats.effect.*
 import com.comcast.ip4s.*
-import com.dimafeng.testcontainers.GenericContainer
 import com.dwolla.nomenclator.consul.*
 import com.dwolla.nomenclator.consul.agent.*
 import com.dwolla.nomenclator.model.*
@@ -11,7 +10,6 @@ import munit.CatsEffectSuite
 import org.http4s.*
 import org.http4s.client.Client
 import org.http4s.ember.client.EmberClientBuilder
-import org.testcontainers.containers.wait.strategy.Wait
 
 import scala.concurrent.duration.*
 
@@ -21,59 +19,16 @@ import scala.concurrent.duration.*
 class ConsulAgentIntegrationSuite extends CatsEffectSuite:
   override def munitIOTimeout: Duration = 3.minutes
 
-  private val httpPort = 8500
-  private val secondsToWaitForAgent = 120
-
   private final case class Running(client: Client[IO], base: Uri, agent: ConsulAgent[IO], token: Option[String])
-
-  private def container(version: ConsulVersion, aclConfig: Option[String]): Resource[IO, GenericContainer] =
-    Resource.make(IO.blocking:
-      val c = GenericContainer(
-        dockerImage = version.image,
-        exposedPorts = Seq(httpPort),
-        env = aclConfig.map("CONSUL_LOCAL_CONFIG" -> _).toMap,
-        command = Seq("agent", "-dev", "-client=0.0.0.0"),
-        waitStrategy = Wait
-          .forHttp("/v1/status/leader")
-          .forResponsePredicate(_.contains(":"))
-          .withStartupTimeout(
-            java.time.Duration.ofSeconds(secondsToWaitForAgent.toLong)
-          )
-      )
-      version.platform.foreach: p =>
-        c.configure: container =>
-          container.withCreateContainerCmdModifier: cmd =>
-            cmd.withPlatform(p)
-            ()
-          ()
-      c.start()
-      c)(c => IO.blocking(c.stop()))
 
   private def running(version: ConsulVersion, aclConfig: Option[String], token: Option[String]): Resource[IO, Running] =
     for
-      c <- container(version, aclConfig)
+      base <- ConsulContainer.resource(version, aclConfig)
       client <- EmberClientBuilder.default[IO].build
-      base = Uri(
-        scheme = Some(Uri.Scheme.http),
-        authority = Some(
-          Uri.Authority(
-            host = Uri.RegName(c.host),
-            port = Some(c.mappedPort(httpPort))
-          )
-        )
-      )
     yield Running(client, base, Http4sConsulAgent(client, base, token), token)
 
-  /** Right after startup an ACL-enabled agent can still be creating its
-    * management token, so wait until it answers an authenticated request.
-    */
   private def awaitReady(r: Running): IO[Running] =
-    def attempt(remaining: Int): IO[Unit] =
-      r.agent.state.void.handleErrorWith:
-        case _ if remaining > 0 =>
-          IO.sleep(500.millis) >> attempt(remaining - 1)
-        case e => IO.raiseError(e)
-    attempt(secondsToWaitForAgent * 2).as(r)
+    ConsulContainer.awaitReady(r.agent).as(r)
 
   private def hostPort(n: Int): HostPort =
     HostPort.from(n).fold(fail(_), identity)

@@ -8,6 +8,7 @@ val smithy4sVersion = "0.18.59"
 val http4sVersion = "0.23.38"
 val circeVersion = "0.14.17"
 val log4catsVersion = "2.8.0"
+val otel4sVersion = "1.1.0"
 val testcontainersScalaVersion = "0.44.1"
 
 ThisBuild / organization := "com.dwolla"
@@ -34,6 +35,7 @@ val integrationTestDependencies = Seq(
   "org.typelevel" %% "munit-cats-effect" % munitCatsEffectVersion,
   "org.typelevel" %% "cats-effect-testkit" % catsEffectVersion,
   "com.dimafeng" %% "testcontainers-scala-munit" % testcontainersScalaVersion,
+  "org.http4s" %% "http4s-ember-server" % http4sVersion,
   // testcontainers logs through slf4j 1.x, which warns on stderr without a binding.
   "org.slf4j" % "slf4j-nop" % "1.7.36"
 ).map(_ % Test)
@@ -71,6 +73,7 @@ lazy val app = crossProject(JVMPlatform)
       "org.http4s" %%% "http4s-ember-client" % http4sVersion,
       "org.http4s" %%% "http4s-circe" % http4sVersion,
       "org.typelevel" %%% "log4cats-core" % log4catsVersion,
+      "org.typelevel" %%% "otel4s-core-trace" % otel4sVersion,
       "io.circe" %%% "circe-literal" % circeVersion % Test,
       "org.typelevel" %%% "log4cats-testing" % log4catsVersion % Test
     ) ++ testDependencies.value,
