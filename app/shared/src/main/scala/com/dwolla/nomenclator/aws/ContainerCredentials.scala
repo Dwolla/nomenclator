@@ -3,9 +3,9 @@ package com.dwolla.nomenclator.aws
 import cats.effect.*
 import cats.effect.syntax.all.*
 import cats.syntax.all.*
+import com.dwolla.nomenclator.http.RedactedJson
 import io.circe.Decoder
 import org.http4s.*
-import org.http4s.circe.*
 import org.http4s.client.Client
 import org.http4s.syntax.all.*
 import org.typelevel.log4cats.Logger
@@ -89,10 +89,7 @@ object ContainerCredentials:
         .use: response =>
           if (response.status.isSuccess)
             // The body holds the secret, so decoding failures must not echo it.
-            response.as[Fetched](using
-              summon,
-              jsonOfSensitive[F, Fetched](_ => "<redacted>")
-            )
+            response.as[Fetched](using summon, RedactedJson.decoder[F, Fetched])
           else
             response.body.compile.drain >>
               ContainerCredentialsError(

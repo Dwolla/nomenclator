@@ -3,11 +3,12 @@ package com.dwolla.nomenclator.consul.agent
 import cats.effect.*
 import cats.syntax.all.*
 import com.dwolla.nomenclator.consul.{AgentCheck, AgentService, AgentState}
+import com.dwolla.nomenclator.http.RedactedJson
 import com.dwolla.nomenclator.model.*
 import com.dwolla.nomenclator.registration.Registration
 import io.circe.Decoder
 import org.http4s.*
-import org.http4s.circe.*
+import org.http4s.circe.jsonEncoder
 import org.http4s.client.Client
 import org.typelevel.ci.*
 
@@ -46,7 +47,9 @@ object Http4sConsulAgent:
         .take(excerptLength)
 
     private def get[A](path: String*)(using Decoder[A]): F[A] =
-      send(request(Method.GET, path*))(_.as[A](using summon, jsonOf[F, A]))
+      send(request(Method.GET, path*))(
+        _.as[A](using summon, RedactedJson.decoder[F, A])
+      )
 
     override val advertisedAddress: F[String] =
       get[String]("self")(using ConsulCodecs.memberAddress)

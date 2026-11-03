@@ -186,6 +186,22 @@ class Http4sEcsAgentIntrospectionSuite extends CatsEffectSuite:
           assert(result.isLeft, s"expected a failure, got $result")
         )
 
+  test("a decoding failure never carries the response body"):
+    val secret = "s3cret-docker-name"
+    val body = fixture("tasks.json").replace(
+      "\"ecs-foo-service-3-web-a1b2c3d4e5f6a7b8c9d0\"",
+      s"[\"$secret\"]"
+    )
+    stubClient(json(body)).flatMap:
+      case (_, client) =>
+        Http4sEcsAgentIntrospection(client, base).tasks.attempt.map:
+          case Left(e) =>
+            val chain = List.unfold(Option(e))(
+              _.map(t => (String.valueOf(t.getMessage), Option(t.getCause)))
+            )
+            assert(!chain.exists(_.contains(secret)), chain)
+          case Right(tasks) => fail(s"expected a failure, got $tasks")
+
   test("a task that can't be decoded fails the whole list"):
     val body = fixture("tasks.json").replace(
       "\"Version\": \"3\"",

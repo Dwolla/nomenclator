@@ -6,6 +6,7 @@ import com.dwolla.nomenclator.model.*
 import munit.CatsEffectSuite
 import org.http4s.*
 import org.http4s.client.Client
+import org.http4s.headers.`Content-Type`
 import org.http4s.syntax.all.*
 import org.typelevel.ci.*
 
@@ -58,6 +59,22 @@ class Http4sConsulAgentSuite extends CatsEffectSuite:
       case (seen, client) =>
         Http4sConsulAgent(client, base, None).deregister(id) >>
           seen.get.map(requests => assertEquals(requests.flatMap(_.headers.get(tokenHeader)), Nil))
+
+  test("a decoding failure never carries the response body"):
+    val secret = "s3cret-service-name"
+    stubClient(
+      Response[IO](Status.Ok)
+        .withEntity(s"""{"h:web:80":{"ID":"h:web:80","Service":["$secret"]}}""")
+        .withContentType(`Content-Type`(MediaType.application.json))
+    ).flatMap:
+      case (_, client) =>
+        Http4sConsulAgent(client, base, None).state.attempt.map:
+          case Left(e) =>
+            val chain = List.unfold(Option(e))(
+              _.map(t => (String.valueOf(t.getMessage), Option(t.getCause)))
+            )
+            assert(!chain.exists(_.contains(secret)), chain)
+          case Right(state) => fail(s"expected a failure, got $state")
 
   test("deregistering an ID the agent doesn't know succeeds"):
     stubClient(Response[IO](Status.NotFound)).flatMap:

@@ -3,9 +3,9 @@ package com.dwolla.nomenclator.ecs.agent
 import cats.effect.*
 import cats.syntax.all.*
 import com.dwolla.nomenclator.ecs.{EcsTask, InstanceMetadata}
+import com.dwolla.nomenclator.http.RedactedJson
 import io.circe.Decoder
 import org.http4s.*
-import org.http4s.circe.*
 import org.http4s.client.Client
 import org.http4s.syntax.all.*
 
@@ -22,7 +22,8 @@ object Http4sEcsAgentIntrospection:
         .run(req)
         .use: response =>
           if (response.status.isSuccess)
-            response.as[A](using summon, jsonOf[F, A](using summon, decoder))
+            response
+              .as[A](using summon, RedactedJson.decoder(using summon, decoder))
           else
             response.body.compile.drain >>
               EcsAgentError(

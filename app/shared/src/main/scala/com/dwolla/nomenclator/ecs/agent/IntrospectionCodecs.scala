@@ -39,7 +39,7 @@ object IntrospectionCodecs:
       .map(_.fold(TaskStatus.Other(""))(TaskStatus.fromString))
 
   private val revision: Decoder[Int] =
-    Decoder.decodeString.emap(s => s.toIntOption.toRight(s"Version must be an integer, got '$s'"))
+    Decoder.decodeString.emap(s => s.toIntOption.toRight("Version must be an integer"))
 
   /** Docker names containers with a leading `/`; registrator used the name
     * without it.
