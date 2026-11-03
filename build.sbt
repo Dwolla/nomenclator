@@ -3,6 +3,7 @@ val fs2Version = "3.14.0"
 val munitVersion = "1.3.6"
 val munitScalaCheckVersion = "1.3.1"
 val munitCatsEffectVersion = "2.2.1"
+val ip4sVersion = "3.8.0"
 val smithy4sVersion = "0.18.59"
 
 ThisBuild / organization := "com.dwolla"
@@ -41,7 +42,8 @@ lazy val core = crossProject(JVMPlatform)
     name := "nomenclator-core",
     libraryDependencies ++= Seq(
       "org.typelevel" %%% "cats-effect" % catsEffectVersion,
-      "co.fs2" %%% "fs2-core" % fs2Version
+      "co.fs2" %%% "fs2-core" % fs2Version,
+      "com.comcast" %%% "ip4s-core" % ip4sVersion
     ) ++ testDependencies.value
   )
 
