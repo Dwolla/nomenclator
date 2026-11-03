@@ -5,7 +5,7 @@ import cats.effect.testkit.TestControl
 import cats.syntax.all.*
 import com.dwolla.nomenclator.consul.*
 import com.dwolla.nomenclator.consul.agent.*
-import com.dwolla.nomenclator.consul.agent.InMemoryConsulAgent.Write
+import com.dwolla.nomenclator.consul.agent.InMemoryConsulAgent.Attempt
 import com.dwolla.nomenclator.ecs.*
 import com.dwolla.nomenclator.ecs.agent.*
 import com.dwolla.nomenclator.ecs.api.*
@@ -159,10 +159,17 @@ class ReconcilerSuite extends CatsEffectSuite:
       .compile
       .toList
 
-  private def described(writes: Vector[Write]): Vector[String] =
+  private def described(writes: Vector[Attempt]): Vector[String] =
     writes.map:
-      case Write.Register(r)    => s"register ${r.id.value}"
-      case Write.Deregister(id) => s"deregister ${id.value}"
+      case Attempt.Register(r)    => s"register ${r.id.value}"
+      case Attempt.Deregister(id) => s"deregister ${id.value}"
+
+  /** What each write of a pass did, and whether it succeeded.
+    */
+  private def kinds(report: PassReport): Either[Throwable, List[String]] =
+    report.outcome.map(
+      _.writes.map(w => s"${w.kind.value} ${w.id.value} ${w.result.fold(_ => "failed", _ => "ok")}")
+    )
 
   private def warnings(logged: Vector[LogMessage]): Vector[LogMessage] =
     logged.collect:
@@ -200,7 +207,7 @@ class ReconcilerSuite extends CatsEffectSuite:
         )
         assertEquals(agent.services.map(_.id).toSet, Set(fooId, barId))
         assertEquals(
-          reports.map(_.outcome.map(_.failures.map(_._1))),
+          reports.map(_.outcome.map(_.failures.map(_.id))),
           List(Right(List(fooId)), Right(Nil), Right(Nil))
         )
         assertEquals(
@@ -467,6 +474,19 @@ class ReconcilerSuite extends CatsEffectSuite:
             s"register ${bazId.value}"
           )
         )
+        assertEquals(
+          reports.headOption.map(kinds),
+          Some(
+            Right(
+              List(
+                s"deregister ${orphan.id.value} ok",
+                s"replace ${fooId.value} ok",
+                s"update ${barId.value} ok",
+                s"register ${bazId.value} ok"
+              )
+            )
+          )
+        )
         assertEquals(agent.checks, Nil)
         assertEquals(
           infos(logged).map(_.ctx),
@@ -729,6 +749,84 @@ class ReconcilerSuite extends CatsEffectSuite:
           logged.toString
         )
 
+  test(
+    "a replacement whose register fails is reported as a deregistration and a failed registration"
+  ):
+    val program = for
+      w <- world(
+        List(foo),
+        Map(fooRef -> plain),
+        AgentState(
+          List(agentService(fooId, "foo-service", 32768)),
+          List(AgentCheck(s"service:${fooId.value}", fooId.some, None))
+        )
+      )
+      _ <- w.consul.failRegistrationsOf(Set(fooId))
+      reports <- passes(w, 1)()
+    yield reports
+
+    TestControl
+      .executeEmbed(program)
+      .map: reports =>
+        assertEquals(
+          reports.map(kinds),
+          List(
+            Right(
+              List(
+                s"deregister ${fooId.value} ok",
+                s"register ${fooId.value} failed"
+              )
+            )
+          )
+        )
+
+  test(
+    "a replacement whose deregister fails is logged, reported, and retried as an update"
+  ):
+    val program = for
+      w <- world(
+        List(foo),
+        Map(fooRef -> plain),
+        AgentState(
+          List(agentService(fooId, "foo-service", 32768)),
+          List(AgentCheck(s"service:${fooId.value}", fooId.some, None))
+        )
+      )
+      _ <- w.consul.failDeregistrationsOf(Set(fooId))
+      reports <- passes(w, 1)()
+      writes <- w.consul.writes
+      logged <- w.logger.logged
+    yield (reports, writes, logged)
+
+    TestControl
+      .executeEmbed(program)
+      .map: (reports, writes, logged) =>
+        assertEquals(
+          described(writes),
+          Vector(s"deregister ${fooId.value}", s"register ${fooId.value}")
+        )
+        assertEquals(
+          reports.map(kinds),
+          List(
+            Right(
+              List(
+                s"deregister ${fooId.value} failed",
+                s"update ${fooId.value} ok"
+              )
+            )
+          )
+        )
+        assertEquals(
+          infos(logged).map(_.ctx.get("kind")),
+          Vector(Some("update")),
+          logged.toString
+        )
+        assertEquals(
+          warnings(logged).filter(about(fooId)).size,
+          1,
+          logged.toString
+        )
+
   test("a failed deregistration doesn't stop the others"):
     val otherOrphan =
       orphan.copy(id = ServiceId("test-host:ecs-gone-2-web-eeee:8080"))
@@ -752,7 +850,7 @@ class ReconcilerSuite extends CatsEffectSuite:
         )
         assertEquals(agent.services, List(orphan))
         assertEquals(
-          reports.map(_.outcome.map(_.failures.map(_._1))),
+          reports.map(_.outcome.map(_.failures.map(_.id))),
           List(Right(List(orphan.id)))
         )
 

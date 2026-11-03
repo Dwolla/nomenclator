@@ -154,7 +154,7 @@ class InstrumentationSuite extends CatsEffectSuite:
   test("no span records the Consul token or a task definition's environment"):
     instrumentedPass.map: (reports, spans, _) =>
       assertEquals(
-        reports.flatMap(_.outcome.toOption).flatMap(_.failures.map(_._1)),
+        reports.flatMap(_.outcome.toOption).flatMap(_.failures.map(_.id)),
         List(ServiceId(fooId)),
         "the refused registration should have been attempted and failed"
       )

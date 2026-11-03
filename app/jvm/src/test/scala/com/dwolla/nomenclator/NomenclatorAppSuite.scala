@@ -6,7 +6,7 @@ import cats.syntax.all.*
 import com.dwolla.nomenclator.config.{NomenclatorConfig, TestEnvironment}
 import com.dwolla.nomenclator.consul.AgentState
 import com.dwolla.nomenclator.consul.agent.InMemoryConsulAgent
-import com.dwolla.nomenclator.consul.agent.InMemoryConsulAgent.Write
+import com.dwolla.nomenclator.consul.agent.InMemoryConsulAgent.Attempt
 import com.dwolla.nomenclator.ecs.*
 import com.dwolla.nomenclator.ecs.agent.InMemoryEcsAgent
 import com.dwolla.nomenclator.ecs.api.{InMemoryTaskDefinitions, LookupResult}
@@ -100,8 +100,8 @@ class NomenclatorAppSuite extends CatsEffectSuite:
         assertEquals(stateAfter, stateBefore)
         assert(
           !writesAfter.exists:
-            case Write.Deregister(_) => true
-            case _                   => false
+            case Attempt.Deregister(_) => true
+            case _                     => false
           ,
           writesAfter
         )

@@ -190,62 +190,67 @@ object Reconciler:
 
     /** Deregisters, then registers, as the [[com.dwolla.nomenclator.plan.Plan]]
       * contract requires. Every write is attempted whatever happened to the
-      * others; the failures are returned, and the next pass's plan retries
-      * them.
+      * others, and the next pass's plan retries the failures. Each successful
+      * write is logged as soon as its kind is known; a replacement's
+      * deregistration is reported with its registration, since only then is it
+      * known whether both halves succeeded.
       */
-    private def applyPlan(plan: Plan, actual: AgentState): F[List[(ServiceId, Throwable)]] =
+    private def applyPlan(plan: Plan, actual: AgentState): F[List[Write]] =
       val onAgent = actual.services.map(s => s.id -> s).toMap
-      val replaced =
-        plan.register.map(_.id).toSet.intersect(plan.deregister.toSet)
+      val registering = plan.register.map(r => r.id -> r).toMap
 
-      def deregisteredLog(id: ServiceId): F[Unit] =
-        changed(
-          "deregister",
-          id,
-          onAgent.get(id).fold(Map.empty)(LogContext.of)
-        )
+      def reported(w: Write): F[Write] =
+        val service = w.kind match
+          case ChangeKind.Deregister =>
+            onAgent.get(w.id).fold(Map.empty)(LogContext.of)
+          case _ => registering.get(w.id).fold(Map.empty)(LogContext.of)
+        StructuredLogger[F]
+          .info(
+            service ++ Map("kind" -> w.kind.value, "service_id" -> w.id.value)
+          )(s"Consul agent change: ${w.kind.value} ${w.id.value}")
+          .whenA(w.result.isRight)
+          .as(w)
 
-      // A replacement is logged once both halves are known: as `replace` if
-      // both succeeded, as `deregister` if only the deregistration did.
-      val deregistrations = plan.deregister.traverse: id =>
-        consul
-          .deregister(id)
-          .attempt
-          .flatTap(_.traverse_(_ => deregisteredLog(id).unlessA(replaced(id))))
-          .tupleLeft(id)
+      // Right: logged and done. Left: deregistered so that it can be
+      // registered again, which decides how it is reported.
+      val deregistrations: F[List[Either[ServiceId, Write]]] =
+        plan.deregister.traverse: id =>
+          consul
+            .deregister(id)
+            .attempt
+            .flatMap:
+              case Right(_) if registering.contains(id) =>
+                id.asLeft[Write].pure[F]
+              case result =>
+                reported(Write(id, ChangeKind.Deregister, result)).map(_.asRight)
 
-      def registrations(deregistered: Set[ServiceId]) =
-        plan.register.traverse: r =>
-          val removed = replaced(r.id) && deregistered(r.id)
-          val kind =
-            if (removed) "replace"
-            else if (onAgent.contains(r.id)) "update"
-            else "register"
+      def registrations(removed: Set[ServiceId]): F[List[Write]] =
+        plan.register.flatTraverse: r =>
           consul
             .register(r)
             .attempt
-            .flatTap:
-              case Right(_) => changed(kind, r.id, LogContext.of(r))
-              case Left(_)  => deregisteredLog(r.id).whenA(removed)
-            .tupleLeft(r.id)
+            .flatMap: result =>
+              val writes = (removed(r.id), result) match
+                case (true, Right(_)) =>
+                  List(Write(r.id, ChangeKind.Replace, result))
+                case (true, Left(_)) =>
+                  List(
+                    Write(r.id, ChangeKind.Deregister, ().asRight),
+                    Write(r.id, ChangeKind.Register, result)
+                  )
+                case (false, _) =>
+                  val kind =
+                    if (onAgent.contains(r.id)) ChangeKind.Update
+                    else ChangeKind.Register
+                  List(Write(r.id, kind, result))
+              writes.traverse(reported)
 
       for
-        deregistered <- deregistrations
-        registered <- registrations(
-          deregistered
-            .collect:
-              case (id, Right(_)) => id
-            .toSet
-        )
-        results = deregistered ++ registered
-        _ <- changeLog.writes(results)
-      yield results.collect:
-        case (id, Left(e)) => id -> e
+        (removed, deregistered) <- deregistrations.map(_.separate)
+        registered <- registrations(removed.toSet)
+        writes = deregistered ++ registered
+        _ <- changeLog.writes(writes)
+      yield writes
     end applyPlan
-
-    private def changed(kind: String, id: ServiceId, service: Map[String, String]): F[Unit] =
-      StructuredLogger[F].info(
-        service ++ Map("kind" -> kind, "service_id" -> id.value)
-      )(s"Consul agent change: $kind ${id.value}")
   end Pass
 end Reconciler

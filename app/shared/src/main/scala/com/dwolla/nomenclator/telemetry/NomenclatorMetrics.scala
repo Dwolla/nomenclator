@@ -160,24 +160,7 @@ object NomenclatorMetrics:
     case LookupResult.Failed  => "failed"
 
   /** How many changes of each kind the pass wrote, and whether they succeeded.
-    * An ID both deregistered and registered is one `replace`; a registration of
-    * an ID the agent already held is an `update`.
     */
   private def written(outcome: PassOutcome): Map[(String, String), Long] =
-    val plan = outcome.plan
-    val registering = plan.register.map(_.id)
-    val deregistering = plan.deregister.toSet
-    val onAgent = outcome.actual.services.map(_.id).toSet
-    val failed = outcome.failures.map(_._1).toSet
-    val kinds =
-      registering.map: id =>
-        id -> (
-          if (deregistering(id)) "replace"
-          else if (onAgent(id)) "update"
-          else "register"
-        )
-      ++ plan.deregister.filterNot(registering.toSet).map(_ -> "deregister")
-    kinds
-      .groupMapReduce((id, kind) => kind -> (if (failed(id)) "error" else "ok"))(_ => 1L)(_ + _)
-  end written
+    outcome.writes.groupMapReduce(w => w.kind.value -> w.result.fold(_ => "error", _ => "ok"))(_ => 1L)(_ + _)
 end NomenclatorMetrics

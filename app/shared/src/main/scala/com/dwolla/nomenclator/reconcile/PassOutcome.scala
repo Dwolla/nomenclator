@@ -1,7 +1,6 @@
 package com.dwolla.nomenclator.reconcile
 
 import com.dwolla.nomenclator.consul.AgentState
-import com.dwolla.nomenclator.model.ServiceId
 import com.dwolla.nomenclator.plan.{Difference, Plan}
 import com.dwolla.nomenclator.registration.Desired
 
@@ -15,13 +14,19 @@ import com.dwolla.nomenclator.registration.Desired
   *   deregistration
   * @param differences
   *   the shadow report; empty in apply mode
-  * @param failures
-  *   the writes that failed, which the next pass retries; empty in shadow mode
+  * @param writes
+  *   the changes written to the agent, in the order they were made; empty in
+  *   shadow mode
   */
 final case class PassOutcome(
                               desired: Desired,
                               actual: AgentState,
                               plan: Plan,
                               differences: List[Difference],
-                              failures: List[(ServiceId, Throwable)]
-)
+                              writes: List[Write]
+):
+
+  /** The writes that failed, which the next pass's plan retries.
+    */
+  def failures: List[Write] = writes.filter(_.result.isLeft)
+end PassOutcome

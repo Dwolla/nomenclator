@@ -53,15 +53,18 @@ class NomenclatorMetricsSuite extends CatsEffectSuite:
                        agent: List[AgentService] = Nil,
                        plan: Plan = Plan(Nil, Nil),
                        differences: List[Difference] = Nil,
-                       failures: List[(ServiceId, Throwable)] = Nil
+                       writes: List[Write] = Nil
   ) =
     PassOutcome(
       Desired(registrations, skips, Set.empty, Nil),
       AgentState(agent, Nil),
       plan,
       differences,
-      failures
+      writes
     )
+
+  private val succeeded = ().asRight[Throwable]
+  private val failed = new RuntimeException("boom").asLeft[Unit]
 
   private val passed = 1.second
 
@@ -88,7 +91,8 @@ class NomenclatorMetricsSuite extends CatsEffectSuite:
         outcome(
           registrations = List(registration(foo)),
           skips = List(skipped(SkipReason.ScriptCheck)),
-          plan = Plan(List(registration(foo)), Nil)
+          plan = Plan(List(registration(foo)), Nil),
+          writes = List(Write(foo, ChangeKind.Register, succeeded))
         ).asRight
       )
     ).map: metrics =>
@@ -125,22 +129,26 @@ class NomenclatorMetricsSuite extends CatsEffectSuite:
         Some("{service}")
       )
 
-  test("changes are classified as update, replace, and deregister"):
+  test("changes are counted by the kind and result of each write"):
     val updated = owned("updated")
     val replaced = owned("replaced")
+    val halfReplaced = owned("half")
     val removed = owned("removed")
     val failedToRemove = owned("stuck")
     recorded(
       Mode.Apply -> PassReport(
         passed,
         outcome(
-          agent = List(updated, replaced, removed, failedToRemove)
-            .map(agentService),
-          plan = Plan(
-            List(registration(updated), registration(replaced)),
-            List(failedToRemove, removed, replaced)
-          ),
-          failures = List(failedToRemove -> new RuntimeException("boom"))
+          writes =
+            List(
+              Write(failedToRemove, ChangeKind.Deregister, failed),
+              Write(removed, ChangeKind.Deregister, succeeded),
+              Write(updated, ChangeKind.Update, succeeded),
+              Write(replaced, ChangeKind.Replace, succeeded),
+              // A replacement whose registration failed did only its first half.
+              Write(halfReplaced, ChangeKind.Deregister, succeeded),
+              Write(halfReplaced, ChangeKind.Register, failed)
+            )
         ).asRight
       )
     ).map: metrics =>
@@ -153,8 +161,9 @@ class NomenclatorMetricsSuite extends CatsEffectSuite:
         Map(
           change("update", "ok") -> 1.0,
           change("replace", "ok") -> 1.0,
-          change("deregister", "ok") -> 1.0,
-          change("deregister", "error") -> 1.0
+          change("deregister", "ok") -> 2.0,
+          change("deregister", "error") -> 1.0,
+          change("register", "error") -> 1.0
         )
       )
 

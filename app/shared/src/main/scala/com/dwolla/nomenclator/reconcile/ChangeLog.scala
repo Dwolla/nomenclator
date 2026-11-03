@@ -119,11 +119,12 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
       )
 
   /** Records the writes made to the Consul agent this pass. An ID written twice
-    * (a replacement) is failing if either write failed.
+    * (a replacement that did not fully succeed) is failing if either write
+    * failed.
     */
-  def writes(results: List[(ServiceId, Either[Throwable, Unit])]): F[Unit] =
-    val byId = results
-      .groupMapReduce(_._1)(_._2)((a, b) => a.flatMap(_ => b))
+  def writes(made: List[Write]): F[Unit] =
+    val byId = made
+      .groupMapReduce(_.id)(_.result)((a, b) => a.flatMap(_ => b))
       .toList
       .sortBy(_._1.value)
     failures(

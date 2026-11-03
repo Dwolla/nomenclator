@@ -16,9 +16,9 @@ final class InMemoryConsulAgent private (
     failingRegistrations: Ref[IO, Set[ServiceId]],
     hangingRegistrations: Ref[IO, Set[ServiceId]],
     failingDeregistrations: Ref[IO, Set[ServiceId]],
-    attempted: Ref[IO, Vector[InMemoryConsulAgent.Write]]
+    attempted: Ref[IO, Vector[InMemoryConsulAgent.Attempt]]
 ) extends ConsulAgent[IO]:
-  import InMemoryConsulAgent.Write
+  import InMemoryConsulAgent.Attempt
 
   override val advertisedAddress: IO[String] = "10.0.0.1".pure[IO]
 
@@ -26,7 +26,7 @@ final class InMemoryConsulAgent private (
     stateFailure.get.flatMap(_.fold(agent.get)(_.raiseError[IO, AgentState]))
 
   override def register(r: Registration): IO[Unit] =
-    attempted.update(_ :+ Write.Register(r)) >>
+    attempted.update(_ :+ Attempt.Register(r)) >>
       hangingRegistrations.get.flatMap(hanging => IO.never.whenA(hanging.contains(r.id))) >>
       failingRegistrations.get.flatMap: failing =>
         if (failing.contains(r.id))
@@ -35,7 +35,7 @@ final class InMemoryConsulAgent private (
         else agent.update(registered(_, r))
 
   override def deregister(id: ServiceId): IO[Unit] =
-    attempted.update(_ :+ Write.Deregister(id)) >>
+    attempted.update(_ :+ Attempt.Deregister(id)) >>
       failingDeregistrations.get.flatMap: failing =>
         if (failing.contains(id))
           ConsulAgentError(
@@ -81,11 +81,11 @@ final class InMemoryConsulAgent private (
   def hangRegistrationsOf(ids: Set[ServiceId]): IO[Unit] =
     hangingRegistrations.set(ids)
 
-  val writes: IO[Vector[Write]] = attempted.get
+  val writes: IO[Vector[Attempt]] = attempted.get
 end InMemoryConsulAgent
 
 object InMemoryConsulAgent:
-  enum Write:
+  enum Attempt:
     case Register(r: Registration)
     case Deregister(id: ServiceId)
 
@@ -96,6 +96,6 @@ object InMemoryConsulAgent:
       Ref.of[IO, Set[ServiceId]](Set.empty),
       Ref.of[IO, Set[ServiceId]](Set.empty),
       Ref.of[IO, Set[ServiceId]](Set.empty),
-      Ref.of[IO, Vector[Write]](Vector.empty)
+      Ref.of[IO, Vector[Attempt]](Vector.empty)
     ).mapN(new InMemoryConsulAgent(_, _, _, _, _, _))
 end InMemoryConsulAgent
