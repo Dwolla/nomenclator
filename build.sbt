@@ -5,6 +5,9 @@ val munitScalaCheckVersion = "1.3.1"
 val munitCatsEffectVersion = "2.2.1"
 val ip4sVersion = "3.8.0"
 val smithy4sVersion = "0.18.59"
+val http4sVersion = "0.23.38"
+val circeVersion = "0.14.17"
+val testcontainersScalaVersion = "0.44.1"
 
 ThisBuild / organization := "com.dwolla"
 ThisBuild / tlBaseVersion := "0.1"
@@ -28,7 +31,10 @@ val integrationTestDependencies = Seq(
   "org.scalameta" %% "munit" % munitVersion,
   "org.scalameta" %% "munit-scalacheck" % munitScalaCheckVersion,
   "org.typelevel" %% "munit-cats-effect" % munitCatsEffectVersion,
-  "org.typelevel" %% "cats-effect-testkit" % catsEffectVersion
+  "org.typelevel" %% "cats-effect-testkit" % catsEffectVersion,
+  "com.dimafeng" %% "testcontainers-scala-munit" % testcontainersScalaVersion,
+  // testcontainers logs through slf4j 1.x, which warns on stderr without a binding.
+  "org.slf4j" % "slf4j-nop" % "1.7.36"
 ).map(_ % Test)
 
 lazy val root = tlCrossRootProject
@@ -60,7 +66,10 @@ lazy val app = crossProject(JVMPlatform)
     ),
     smithy4sAwsSpecs ++= Seq(AWS.ecs),
     libraryDependencies ++= Seq(
-      "com.disneystreaming.smithy4s" %%% "smithy4s-aws-http4s" % smithy4sVersion
+      "com.disneystreaming.smithy4s" %%% "smithy4s-aws-http4s" % smithy4sVersion,
+      "org.http4s" %%% "http4s-ember-client" % http4sVersion,
+      "org.http4s" %%% "http4s-circe" % http4sVersion,
+      "io.circe" %%% "circe-literal" % circeVersion % Test
     ) ++ testDependencies.value,
     // smithy4s generates identifiers containing `$` (e.g. `$Unknown`), which Scala 3 warns about.
     scalacOptions += "-Wconf:src=.*/src_managed/.*:silent"
