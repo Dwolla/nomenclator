@@ -1,6 +1,7 @@
 package com.dwolla.nomenclator
 
 import cats.effect.*
+import cats.effect.metrics.CpuStarvationWarningMetrics
 import cats.effect.testkit.TestControl
 import cats.syntax.all.*
 import com.dwolla.nomenclator.config.{NomenclatorConfig, TestEnvironment}
@@ -215,6 +216,24 @@ class NomenclatorAppSuite extends CatsEffectSuite:
           )
         case Right(uri) => fail(s"expected an error, got $uri")
     )
+
+  test("CPU starvation is logged as a structured warning"):
+    val logger = StructuredTestingLogger.impl[IO]()
+    NomenclatorApp
+      .logCpuStarvation[IO](
+        CpuStarvationWarningMetrics(
+          occurrenceTime = 1.minute,
+          clockDrift = 150.millis,
+          starvationThreshold = 0.1,
+          starvationInterval = 1.second
+        )
+      )(using logger) >>
+      logger.logged.map:
+        case Vector(WARN(message, None, ctx)) =>
+          assertEquals(ctx.get("clock_drift"), Some("150ms"))
+          assertEquals(ctx.get("starvation_interval"), Some("1s"))
+          assert(message.contains("CPU"), message)
+        case other => fail(s"expected one warning, got $other")
 
   test("the environment is the first argument"):
     given StructuredLogger[IO] = StructuredTestingLogger.impl[IO]()

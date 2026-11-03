@@ -1,6 +1,7 @@
 package com.dwolla.nomenclator
 
 import cats.effect.*
+import cats.effect.metrics.CpuStarvationWarningMetrics
 import org.slf4j.bridge.SLF4JBridgeHandler
 
 /** Keeps a Consul agent's services in step with the ECS tasks on its host. The
@@ -14,3 +15,7 @@ object Main extends IOApp:
       SLF4JBridgeHandler.removeHandlersForRootLogger()
       SLF4JBridgeHandler.install()
     >> NomenclatorApp.run[IO](args, runtime.metrics)
+
+  override protected def onCpuStarvationWarn(metrics: CpuStarvationWarningMetrics): IO[Unit] =
+    NomenclatorApp.logCpuStarvation[IO](metrics)(using NomenclatorApp.logger)
+end Main

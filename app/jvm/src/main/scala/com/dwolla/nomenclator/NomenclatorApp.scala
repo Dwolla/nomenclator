@@ -2,6 +2,7 @@ package com.dwolla.nomenclator
 
 import cats.Applicative
 import cats.effect.*
+import cats.effect.metrics.CpuStarvationWarningMetrics
 import cats.effect.std.Env
 import cats.effect.syntax.all.*
 import cats.effect.unsafe.metrics.IORuntimeMetrics as RuntimeMetrics
@@ -14,6 +15,7 @@ import com.dwolla.nomenclator.ecs.api.*
 import com.dwolla.nomenclator.model.HostName
 import com.dwolla.nomenclator.reconcile.*
 import com.dwolla.nomenclator.registration.HostIdentity
+import com.dwolla.nomenclator.settings.GoDuration
 import com.dwolla.nomenclator.telemetry.*
 import com.dwolla.nomenclator.telemetry.AlgebraAspects.given
 import com.dwolla.tracing.DwollaEnvironment
@@ -49,7 +51,7 @@ object NomenclatorApp:
     */
   def run[F[_]: Async: LiftIO: Env](args: List[String], runtimeMetrics: RuntimeMetrics): F[ExitCode] =
     given LoggerFactory[F] = Slf4jFactory.create[F]
-    given StructuredLogger[F] = LoggerFactory[F].getLoggerFromName(name)
+    given StructuredLogger[F] = logger[F]
     (for
       environment <- environment[F](args)
       config <- NomenclatorConfig.load[F]
@@ -59,6 +61,25 @@ object NomenclatorApp:
       StructuredLogger[F]
         .error(e)(s"Nomenclator is exiting: ${e.getMessage}")
         .as(ExitCode.Error)
+    )
+
+  /** The JSON log every line goes to.
+    */
+  def logger[F[_]: Sync]: StructuredLogger[F] =
+    Slf4jFactory.create[F].getLoggerFromName(name)
+
+  /** Cats Effect's warning that its compute pool is starved of CPU, as a line
+    * in the JSON log rather than text on standard error.
+    */
+  def logCpuStarvation[F[_]: StructuredLogger](metrics: CpuStarvationWarningMetrics): F[Unit] =
+    StructuredLogger[F].warn(
+      Map(
+        "clock_drift" -> GoDuration.render(metrics.clockDrift),
+        "starvation_threshold" -> metrics.starvationThreshold.toString,
+        "starvation_interval" -> GoDuration.render(metrics.starvationInterval)
+      )
+    )(
+      "Starved of CPU: timers fire late, so passes and timeouts run behind; give the task more CPU or find what is blocking the compute pool"
     )
 
   /** The environment the first argument names, or `Local`.
