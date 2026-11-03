@@ -24,6 +24,14 @@ package com.dwolla.nomenclator.integration
   *   checks are judged by their presence; 1.21 adds top-level `Type`,
   *   `Interval`, and `Timeout` fields (`""` when unset), which the planner
   *   compares.
+  * @param reportsAclFiltering
+  *   whether the agent's `/v1/agent/services` and `/v1/agent/checks` answer
+  *   with `X-Consul-Results-Filtered-By-ACLs: true` when the token can't read
+  *   everything. 1.21 does, so the agent client fails such a read; 1.0.6 drops
+  *   what the token can't read without saying so, which no client can detect.
+  * @param legacyAcls
+  *   whether the agent has the legacy ACL system, whose tokens are created with
+  *   `/v1/acl/create` rather than from policies
   * @param unknownDeregisterStatus
   *   the status the agent itself answers to deregistering a service ID it
   *   doesn't have, or none when it accepts it. The client treats 404 as
@@ -35,6 +43,8 @@ final case class ConsulVersion(
                                 platform: Option[String],
                                 aclConfig: String,
                                 reportsCheckTiming: Boolean,
+                                reportsAclFiltering: Boolean,
+                                legacyAcls: Boolean,
                                 unknownDeregisterStatus: Option[Int]
 )
 
@@ -53,6 +63,8 @@ object ConsulVersions:
     platform = Some("linux/amd64"),
     aclConfig = s"""{"acl_datacenter":"dc1","acl_master_token":"$managementToken","acl_default_policy":"deny"}""",
     reportsCheckTiming = false,
+    reportsAclFiltering = false,
+    legacyAcls = true,
     unknownDeregisterStatus = None
   )
 
@@ -63,6 +75,8 @@ object ConsulVersions:
     aclConfig =
       s"""{"acl":{"enabled":true,"default_policy":"deny","tokens":{"initial_management":"$managementToken"}}}""",
     reportsCheckTiming = true,
+    reportsAclFiltering = true,
+    legacyAcls = false,
     unknownDeregisterStatus = Some(404)
   )
 

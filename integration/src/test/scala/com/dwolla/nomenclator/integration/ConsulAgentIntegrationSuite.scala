@@ -1,6 +1,7 @@
 package com.dwolla.nomenclator.integration
 
 import cats.effect.*
+import cats.syntax.all.*
 import com.comcast.ip4s.*
 import com.dwolla.nomenclator.consul.*
 import com.dwolla.nomenclator.consul.agent.*
@@ -8,9 +9,13 @@ import com.dwolla.nomenclator.model.*
 import com.dwolla.nomenclator.plan.CheckComparison
 import com.dwolla.nomenclator.registration.*
 import munit.CatsEffectSuite
+import io.circe.Json
+import io.circe.syntax.*
 import org.http4s.*
+import org.http4s.circe.*
 import org.http4s.client.Client
 import org.http4s.ember.client.EmberClientBuilder
+import org.typelevel.ci.*
 
 import scala.concurrent.duration.*
 
@@ -274,6 +279,25 @@ class ConsulAgentIntegrationSuite extends CatsEffectSuite:
         List(ServiceId("h:web:80"))
       )
 
+    aclFixture.test(
+      s"${version.label}: a token that can't read every service fails the read only if the version says so"
+    ): r =>
+      for
+        _ <- r.agent.register(registration("h:web:80"))
+        _ <- r.agent.register(
+          registration("h:db:81").copy(name = ServiceName("bar-worker"))
+        )
+        limited <- readOnlyFooToken(version, r)
+        read <- Http4sConsulAgent(r.client, r.base, Some(limited)).state.attempt
+      yield read match
+        case Left(e: ConsulResultsFilteredError) =>
+          assert(version.reportsAclFiltering, e.getMessage)
+          assertEquals(e.path, "/v1/agent/services")
+        case Right(state) =>
+          assert(!version.reportsAclFiltering, s"read succeeded: $state")
+          assertEquals(state.services.map(_.id), List(ServiceId("h:web:80")))
+        case Left(other) => fail(s"unexpected failure: $other")
+
     aclWithoutTokenFixture.test(
       s"${version.label}: with ACLs, registering without a token is forbidden"
     ): r =>
@@ -301,4 +325,35 @@ class ConsulAgentIntegrationSuite extends CatsEffectSuite:
           case other => fail(s"expected a 403, got $other")
 
   private val wrongToken = "a-rejected-token-value"
+
+  /** A token that may read the `foo-service` service and nothing else.
+    */
+  private def readOnlyFooToken(version: ConsulVersion, r: Running): IO[String] =
+    val rules = """service "foo-service" { policy = "read" }"""
+    def put(path: Uri, body: Json): IO[Json] =
+      r.client.expect[Json](
+        Request[IO](Method.PUT, path)
+          .putHeaders(
+            Header.Raw(ci"X-Consul-Token", ConsulVersion.managementToken)
+          )
+          .withEntity(body)
+      )
+    if (version.legacyAcls)
+      put(
+        r.base / "v1" / "acl" / "create",
+        Json.obj(
+          "Name" -> "foo-only".asJson,
+          "Type" -> "client".asJson,
+          "Rules" -> rules.asJson
+        )
+      ).flatMap(_.hcursor.get[String]("ID").liftTo[IO])
+    else
+      put(
+        r.base / "v1" / "acl" / "policy",
+        Json.obj("Name" -> "foo-only".asJson, "Rules" -> rules.asJson)
+      ) >> put(
+        r.base / "v1" / "acl" / "token",
+        Json.obj("Policies" -> Json.arr(Json.obj("Name" -> "foo-only".asJson)))
+      ).flatMap(_.hcursor.get[String]("SecretID").liftTo[IO])
+  end readOnlyFooToken
 end ConsulAgentIntegrationSuite

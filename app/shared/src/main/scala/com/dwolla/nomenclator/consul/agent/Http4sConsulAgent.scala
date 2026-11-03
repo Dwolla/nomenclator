@@ -14,6 +14,7 @@ import org.typelevel.ci.*
 
 object Http4sConsulAgent:
   private val tokenHeader = ci"X-Consul-Token"
+  private val filteredHeader = ci"X-Consul-Results-Filtered-By-ACLs"
   private val excerptLength = 200
 
   /** @param token
@@ -46,10 +47,23 @@ object Http4sConsulAgent:
         .fold(body)(body.replace(_, "<redacted>"))
         .take(excerptLength)
 
+    /** Fails if the agent says ACLs filtered the results, as Consul 1.11 and
+      * later do: a partial answer must never look like a complete one, or the
+      * services left out would be deregistered.
+      */
     private def get[A](path: String*)(using Decoder[A]): F[A] =
-      send(request(Method.GET, path*))(
-        _.as[A](using summon, RedactedJson.decoder[F, A])
-      )
+      val req = request(Method.GET, path*)
+      send(req): response =>
+        if (filtered(response))
+          response.body.compile.drain >>
+            ConsulResultsFilteredError(req.uri.path.renderString)
+              .raiseError[F, A]
+        else response.as[A](using summon, RedactedJson.decoder[F, A])
+
+    private def filtered(response: Response[F]): Boolean =
+      response.headers
+        .get(filteredHeader)
+        .exists(_.exists(_.value.equalsIgnoreCase("true")))
 
     override val advertisedAddress: F[ServiceAddress] =
       get[ServiceAddress]("self")(using ConsulCodecs.memberAddress)

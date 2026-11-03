@@ -76,6 +76,36 @@ class Http4sConsulAgentSuite extends CatsEffectSuite:
             assert(!chain.exists(_.contains(secret)), chain)
           case Right(state) => fail(s"expected a failure, got $state")
 
+  private val emptyObject =
+    Response[IO](Status.Ok)
+      .withEntity("{}")
+      .withContentType(`Content-Type`(MediaType.application.json))
+
+  // An ACL token that can't read every service gets the rest silently
+  // dropped; the state would look like services had gone.
+  test("a read whose results ACLs filtered fails"):
+    stubClient(
+      emptyObject.putHeaders(
+        Header.Raw(ci"X-Consul-Results-Filtered-By-ACLs", "true")
+      )
+    ).flatMap:
+      case (_, client) =>
+        Http4sConsulAgent(client, base, Some(token)).state.attempt.map:
+          case Left(e: ConsulResultsFilteredError) =>
+            assertEquals(e.path, "/v1/agent/services")
+            assert(!e.getMessage.contains(token), e.getMessage)
+          case other =>
+            fail(s"expected a ConsulResultsFilteredError, got $other")
+
+  test("a read whose results ACLs did not filter succeeds"):
+    stubClient(
+      emptyObject.putHeaders(
+        Header.Raw(ci"X-Consul-Results-Filtered-By-ACLs", "false")
+      )
+    ).flatMap:
+      case (_, client) =>
+        Http4sConsulAgent(client, base, Some(token)).state.map(state => assertEquals(state.services, Nil))
+
   test("deregistering an ID the agent doesn't know succeeds"):
     stubClient(Response[IO](Status.NotFound)).flatMap:
       case (_, client) =>
