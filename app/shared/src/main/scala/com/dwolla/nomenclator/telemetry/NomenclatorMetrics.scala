@@ -111,7 +111,7 @@ object NomenclatorMetrics:
       override def record(mode: Mode, report: PassReport): F[Unit] =
         duration.record(
           report.duration.toNanos.toDouble / 1e9,
-          Attribute("nomenclator.mode", modeValue(mode)),
+          Attribute("nomenclator.mode", mode.value),
           Attribute(
             "nomenclator.reconcile.outcome",
             if (report.outcome.isRight) "ok" else "error"
@@ -149,10 +149,6 @@ object NomenclatorMetrics:
 
   private def ownership(value: String) =
     Attribute("nomenclator.ownership", value)
-
-  private def modeValue(mode: Mode): String = mode match
-    case Mode.Apply  => "apply"
-    case Mode.Shadow => "shadow"
 
   private def lookupValue(result: LookupResult): String = result match
     case LookupResult.Cached  => "cached"

@@ -57,7 +57,7 @@ final case class NomenclatorConfig(
     */
   def logContext: Map[String, String] =
     Map(
-      "mode" -> NomenclatorConfig.modeName(mode),
+      "mode" -> mode.value,
       "consul_address" -> consulAddress.renderString,
       "consul_token" -> consulToken.fold("<unset>")(_ => "<redacted>"),
       "interval" -> GoDuration.render(interval),
@@ -147,14 +147,10 @@ object NomenclatorConfig:
       )
     ).flatten
 
-  private def modeName(mode: Mode): String = mode match
-    case Mode.Apply  => "apply"
-    case Mode.Shadow => "shadow"
-
   private val mode: ConfigDecoder[String, Mode] =
-    ConfigDecoder[String].collect("a mode (apply or shadow)"):
-      case "apply"  => Mode.Apply
-      case "shadow" => Mode.Shadow
+    ConfigDecoder[String].mapOption(
+      s"a mode (${Mode.values.map(_.value).mkString(" or ")})"
+    )(Mode.fromString)
 
   private val positiveDuration: ConfigDecoder[String, FiniteDuration] =
     ConfigDecoder[String].mapEither: (key, value) =>
