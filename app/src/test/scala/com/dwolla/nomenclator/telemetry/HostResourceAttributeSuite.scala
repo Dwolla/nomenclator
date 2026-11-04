@@ -3,7 +3,7 @@ package com.dwolla.nomenclator.telemetry
 import cats.effect.*
 import cats.effect.std.Env
 import cats.syntax.all.*
-import com.dwolla.nomenclator.model.HostName
+import com.dwolla.nomenclator.registration.HostName
 import munit.CatsEffectSuite
 
 class HostResourceAttributeSuite extends CatsEffectSuite:

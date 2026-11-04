@@ -3,7 +3,7 @@ package com.dwolla.nomenclator.config
 import cats.effect.*
 import cats.syntax.all.*
 import ciris.*
-import com.dwolla.nomenclator.model.*
+import com.dwolla.nomenclator.consul.model.*
 import com.dwolla.nomenclator.reconcile.Mode
 import munit.CatsEffectSuite
 import org.http4s.syntax.all.*

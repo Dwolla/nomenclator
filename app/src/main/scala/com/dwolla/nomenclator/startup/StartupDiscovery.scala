@@ -3,9 +3,10 @@ package com.dwolla.nomenclator.startup
 import cats.MonadThrow
 import cats.effect.*
 import cats.syntax.all.*
-import com.dwolla.nomenclator.consul.agent.ConsulAgent
-import com.dwolla.nomenclator.ecs.agent.EcsAgentIntrospection
-import com.dwolla.nomenclator.model.{HostName, ServiceAddress}
+import com.dwolla.nomenclator.consul.algebra.ConsulAgent
+import com.dwolla.nomenclator.consul.model.ServiceAddress
+import com.dwolla.nomenclator.ecs.algebra.EcsAgentIntrospection
+import com.dwolla.nomenclator.registration.HostName
 import org.typelevel.log4cats.StructuredLogger
 import smithy4s.aws.AwsRegion
 

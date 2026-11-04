@@ -1,8 +1,8 @@
 package com.dwolla.nomenclator.plan
 
 import cats.data.NonEmptyList
-import com.dwolla.nomenclator.consul.*
-import com.dwolla.nomenclator.registration.Registration
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.registration.*
 
 /** Compares what Nomenclator would register with everything on the agent,
   * registrator's entries included, so shadow mode can show what a cutover would

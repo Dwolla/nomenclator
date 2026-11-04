@@ -3,12 +3,10 @@ package com.dwolla.nomenclator.reconcile
 import cats.effect.*
 import cats.effect.syntax.all.*
 import cats.syntax.all.*
-import com.dwolla.nomenclator.consul.*
-import com.dwolla.nomenclator.consul.agent.ConsulAgent
-import com.dwolla.nomenclator.ecs.{EcsTask, TaskDefinitionRef}
-import com.dwolla.nomenclator.ecs.agent.EcsAgentIntrospection
-import com.dwolla.nomenclator.ecs.api.TaskDefinitions
-import com.dwolla.nomenclator.model.*
+import com.dwolla.nomenclator.consul.algebra.ConsulAgent
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.ecs.algebra.{EcsAgentIntrospection, TaskDefinitions}
+import com.dwolla.nomenclator.ecs.model.{EcsTask, TaskDefinitionRef}
 import com.dwolla.nomenclator.plan.*
 import com.dwolla.nomenclator.reconcile.ChangeLog.Dependency
 import com.dwolla.nomenclator.registration.*

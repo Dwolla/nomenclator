@@ -1,6 +1,8 @@
 package com.dwolla.nomenclator.gen
 
-import com.dwolla.nomenclator.model.*
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.ecs.model.*
+import com.dwolla.nomenclator.registration.*
 import org.scalacheck.{Arbitrary, Gen}
 
 object ModelGen:

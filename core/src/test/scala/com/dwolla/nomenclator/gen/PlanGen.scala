@@ -1,10 +1,9 @@
 package com.dwolla.nomenclator.gen
 
 import cats.syntax.all.*
-import com.dwolla.nomenclator.consul.*
-import com.dwolla.nomenclator.model.*
-import com.dwolla.nomenclator.registration.{Check, Registration}
-import com.dwolla.nomenclator.settings.GoDuration
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.registration.*
+import com.dwolla.nomenclator.registration.settings.GoDuration
 import org.scalacheck.{Cogen, Gen}
 
 import scala.concurrent.duration.*

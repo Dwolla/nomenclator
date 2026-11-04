@@ -3,7 +3,7 @@ package com.dwolla.nomenclator.reconcile
 import cats.effect.*
 import cats.effect.syntax.all.*
 import cats.syntax.all.*
-import com.dwolla.nomenclator.ecs.TaskDefinitionRef
+import com.dwolla.nomenclator.ecs.model.TaskDefinitionRef
 
 import scala.concurrent.duration.FiniteDuration
 

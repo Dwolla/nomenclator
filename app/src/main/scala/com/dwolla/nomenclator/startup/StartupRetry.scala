@@ -3,7 +3,7 @@ package com.dwolla.nomenclator.startup
 import cats.effect.*
 import cats.effect.syntax.all.*
 import cats.syntax.all.*
-import com.dwolla.nomenclator.settings.GoDuration
+import com.dwolla.nomenclator.registration.settings.GoDuration
 import org.typelevel.log4cats.StructuredLogger
 
 import scala.concurrent.duration.FiniteDuration

@@ -1,6 +1,6 @@
 package com.dwolla.nomenclator.gen
 
-import com.dwolla.nomenclator.ecs.*
+import com.dwolla.nomenclator.ecs.model.*
 import org.scalacheck.{Arbitrary, Gen}
 
 object EcsGen:

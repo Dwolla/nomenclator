@@ -1,6 +1,6 @@
 package com.dwolla.nomenclator.reconcile
 
-import com.dwolla.nomenclator.consul.AgentService
+import com.dwolla.nomenclator.consul.model.AgentService
 import com.dwolla.nomenclator.registration.Registration
 
 /** How a service appears in the structured context of a log line.

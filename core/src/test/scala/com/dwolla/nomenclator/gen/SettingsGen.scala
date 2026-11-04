@@ -1,6 +1,6 @@
 package com.dwolla.nomenclator.gen
 
-import com.dwolla.nomenclator.settings.ContainerSettings
+import com.dwolla.nomenclator.registration.settings.ContainerSettings
 import org.scalacheck.Gen
 
 object SettingsGen:

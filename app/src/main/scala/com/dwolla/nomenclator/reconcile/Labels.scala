@@ -1,0 +1,38 @@
+package com.dwolla.nomenclator.reconcile
+
+import com.dwolla.nomenclator.plan.Difference
+import com.dwolla.nomenclator.registration.SkipReason
+
+/** How a [[com.dwolla.nomenclator.plan.Difference]] is named in logs and
+  * metrics. `values` lists every name, so a metric can report a kind of
+  * difference that has none as zero.
+  */
+enum DifferenceLabel(val value: String):
+  case Missing extends DifferenceLabel("missing")
+  case Extra extends DifferenceLabel("extra")
+  case Different extends DifferenceLabel("different")
+
+object DifferenceLabel:
+  def of(difference: Difference): DifferenceLabel = difference match
+    case Difference.Missing(_)         => Missing
+    case Difference.Extra(_)           => Extra
+    case Difference.Different(_, _, _) => Different
+
+/** How a [[com.dwolla.nomenclator.registration.SkipReason]] is named in logs
+  * and metrics. `values` lists every name, so a metric can report a reason no
+  * container has as zero.
+  */
+enum SkipReasonLabel(val value: String):
+  case Ignored extends SkipReasonLabel("ignored")
+  case ScriptCheck extends SkipReasonLabel("script_check")
+  case TtlCheck extends SkipReasonLabel("ttl_check")
+  case NoHostPort extends SkipReasonLabel("no_host_port")
+  case InvalidSettings extends SkipReasonLabel("invalid_settings")
+
+object SkipReasonLabel:
+  def of(reason: SkipReason): SkipReasonLabel = reason match
+    case SkipReason.Ignored            => Ignored
+    case SkipReason.ScriptCheck        => ScriptCheck
+    case SkipReason.TtlCheck           => TtlCheck
+    case SkipReason.NoHostPort         => NoHostPort
+    case SkipReason.InvalidSettings(_) => InvalidSettings

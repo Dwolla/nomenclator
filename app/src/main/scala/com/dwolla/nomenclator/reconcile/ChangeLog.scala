@@ -3,11 +3,11 @@ package com.dwolla.nomenclator.reconcile
 import cats.Monad
 import cats.effect.Ref
 import cats.syntax.all.*
-import com.dwolla.nomenclator.ecs.TaskDefinitionRef
-import com.dwolla.nomenclator.model.*
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.ecs.model.TaskDefinitionRef
 import com.dwolla.nomenclator.plan.Difference
 import com.dwolla.nomenclator.registration.*
-import com.dwolla.nomenclator.settings.SettingsError
+import com.dwolla.nomenclator.registration.settings.SettingsError
 import org.typelevel.log4cats.StructuredLogger
 import smithy4s.http.UnknownErrorResponse
 

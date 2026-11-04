@@ -4,11 +4,11 @@ import cats.tagless.Trivial
 import cats.tagless.aop.Aspect
 import cats.tagless.aop.Aspect.{Advice, Weave}
 import cats.{Eval, ~>}
-import com.dwolla.nomenclator.consul.AgentState
-import com.dwolla.nomenclator.consul.agent.{ConsulAgent, ConsulCodecs}
-import com.dwolla.nomenclator.ecs.agent.EcsAgentIntrospection
-import com.dwolla.nomenclator.ecs.{EcsTask, InstanceMetadata}
-import com.dwolla.nomenclator.model.{ServiceAddress, ServiceId}
+import com.dwolla.nomenclator.consul.algebra.ConsulAgent
+import com.dwolla.nomenclator.consul.http4s.ConsulCodecs
+import com.dwolla.nomenclator.consul.model.{AgentState, ServiceAddress, ServiceId}
+import com.dwolla.nomenclator.ecs.algebra.EcsAgentIntrospection
+import com.dwolla.nomenclator.ecs.model.{EcsTask, InstanceMetadata}
 import com.dwolla.nomenclator.registration.Registration
 import com.dwolla.tracing.otel4s.ToAnyValue
 import org.typelevel.otel4s.AnyValue

@@ -1,9 +1,9 @@
 package com.dwolla.nomenclator.plan
 
-import com.dwolla.nomenclator.consul.*
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.ecs.model.*
 import com.dwolla.nomenclator.gen.{ModelGen, PlanGen}
-import com.dwolla.nomenclator.model.*
-import com.dwolla.nomenclator.registration.{Check, Registration}
+import com.dwolla.nomenclator.registration.*
 import munit.ScalaCheckSuite
 import org.scalacheck.Prop.forAll
 

@@ -2,14 +2,12 @@ package com.dwolla.nomenclator.reconcile
 
 import cats.effect.*
 import cats.syntax.all.*
-import com.dwolla.nomenclator.consul.*
-import com.dwolla.nomenclator.consul.agent.InMemoryConsulAgent
-import com.dwolla.nomenclator.ecs.*
-import com.dwolla.nomenclator.ecs.agent.InMemoryEcsAgent
-import com.dwolla.nomenclator.ecs.api.InMemoryTaskDefinitions
-import com.dwolla.nomenclator.model.*
-import com.dwolla.nomenclator.registration.HostIdentity
-import com.dwolla.nomenclator.settings.ContainerSettings
+import com.dwolla.nomenclator.consul.algebra.InMemoryConsulAgent
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.ecs.algebra.{InMemoryEcsAgent, InMemoryTaskDefinitions}
+import com.dwolla.nomenclator.ecs.model.*
+import com.dwolla.nomenclator.registration.*
+import com.dwolla.nomenclator.registration.settings.ContainerSettings
 import io.opentelemetry.api.common.AttributeKey
 import munit.CatsEffectSuite
 import org.typelevel.log4cats.StructuredLogger

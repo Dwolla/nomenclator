@@ -3,9 +3,9 @@ package com.dwolla.nomenclator.telemetry
 import cats.data.NonEmptyList
 import cats.effect.*
 import cats.syntax.all.*
-import com.dwolla.nomenclator.consul.*
-import com.dwolla.nomenclator.ecs.api.LookupResult
-import com.dwolla.nomenclator.model.*
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.ecs.model.*
+import com.dwolla.nomenclator.ecs.smithy4s.LookupResult
 import com.dwolla.nomenclator.plan.*
 import com.dwolla.nomenclator.reconcile.*
 import com.dwolla.nomenclator.registration.*

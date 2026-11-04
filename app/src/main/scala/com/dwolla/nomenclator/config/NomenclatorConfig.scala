@@ -3,11 +3,12 @@ package com.dwolla.nomenclator.config
 import cats.effect.Async
 import cats.syntax.all.*
 import ciris.*
-import com.dwolla.nomenclator.model.*
-import com.dwolla.nomenclator.reconcile.{DefinitionLookups, Mode}
-import com.dwolla.nomenclator.settings.GoDuration
 import com.comcast.ip4s.*
-import com.dwolla.nomenclator.ecs.agent.Http4sEcsAgentIntrospection
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.ecs.http4s.Http4sEcsAgentIntrospection
+import com.dwolla.nomenclator.reconcile.{DefinitionLookups, Mode}
+import com.dwolla.nomenclator.registration.*
+import com.dwolla.nomenclator.registration.settings.GoDuration
 import org.http4s.Uri
 import org.typelevel.ci.*
 import smithy4s.aws.AwsRegion

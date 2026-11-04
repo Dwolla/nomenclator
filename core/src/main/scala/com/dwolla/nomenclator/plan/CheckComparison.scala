@@ -1,9 +1,8 @@
 package com.dwolla.nomenclator.plan
 
-import com.dwolla.nomenclator.consul.*
-import com.dwolla.nomenclator.model.ServiceId
-import com.dwolla.nomenclator.registration.Check
-import com.dwolla.nomenclator.settings.GoDuration
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.registration.*
+import com.dwolla.nomenclator.registration.settings.GoDuration
 
 import scala.concurrent.duration.*
 

@@ -1,6 +1,7 @@
 package com.dwolla.nomenclator.integration
 
-import com.dwolla.nomenclator.model.{HostName, ServiceAddress, ServiceId}
+import com.dwolla.nomenclator.consul.model.{ServiceAddress, ServiceId}
+import com.dwolla.nomenclator.registration.HostName
 
 /** What the introspection fixtures served by [[FakeEcsAgent]] make a host named
   * [[hostName]] register, by service ID: the one place the expected IDs are

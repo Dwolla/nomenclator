@@ -1,7 +1,8 @@
 package com.dwolla.nomenclator.registration
 
-import com.dwolla.nomenclator.model.*
-import com.dwolla.nomenclator.settings.{ContainerSettings, ServiceSettings}
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.ecs.model.*
+import com.dwolla.nomenclator.registration.settings.{ContainerSettings, ServiceSettings}
 import munit.FunSuite
 
 class ServiceNamingSuite extends FunSuite:

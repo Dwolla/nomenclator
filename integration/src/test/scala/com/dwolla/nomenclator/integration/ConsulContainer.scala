@@ -3,7 +3,7 @@ package com.dwolla.nomenclator.integration
 import cats.effect.*
 import cats.syntax.all.*
 import com.dimafeng.testcontainers.GenericContainer
-import com.dwolla.nomenclator.consul.agent.ConsulAgent
+import com.dwolla.nomenclator.consul.algebra.ConsulAgent
 import org.http4s.Uri
 import org.testcontainers.containers.wait.strategy.Wait
 

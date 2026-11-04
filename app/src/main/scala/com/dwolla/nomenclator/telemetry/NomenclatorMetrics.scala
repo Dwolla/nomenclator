@@ -4,10 +4,9 @@ import cats.Monad
 import cats.effect.*
 import cats.effect.syntax.all.*
 import cats.syntax.all.*
-import com.dwolla.nomenclator.consul.ServiceIds
-import com.dwolla.nomenclator.ecs.api.LookupResult
-import com.dwolla.nomenclator.model.HostName
+import com.dwolla.nomenclator.ecs.smithy4s.LookupResult
 import com.dwolla.nomenclator.reconcile.*
+import com.dwolla.nomenclator.registration.{HostName, ServiceIds}
 import org.typelevel.otel4s.Attribute
 import org.typelevel.otel4s.metrics.*
 

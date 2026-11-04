@@ -2,16 +2,16 @@ package com.dwolla.nomenclator.integration
 
 import cats.effect.*
 import cats.syntax.all.*
-import com.dwolla.nomenclator.consul.*
-import com.dwolla.nomenclator.consul.agent.*
-import com.dwolla.nomenclator.ecs.TaskDefinitionRef
-import com.dwolla.nomenclator.ecs.agent.*
-import com.dwolla.nomenclator.ecs.api.*
-import com.dwolla.nomenclator.model.*
+import com.dwolla.nomenclator.consul.algebra.*
+import com.dwolla.nomenclator.consul.http4s.*
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.ecs.algebra.*
+import com.dwolla.nomenclator.ecs.http4s.*
+import com.dwolla.nomenclator.ecs.model.*
 import com.dwolla.nomenclator.plan.Plan
 import com.dwolla.nomenclator.reconcile.*
 import com.dwolla.nomenclator.registration.*
-import com.dwolla.nomenclator.settings.ContainerSettings
+import com.dwolla.nomenclator.registration.settings.ContainerSettings
 import munit.CatsEffectSuite
 import org.http4s.ember.client.EmberClientBuilder
 import org.typelevel.log4cats.StructuredLogger

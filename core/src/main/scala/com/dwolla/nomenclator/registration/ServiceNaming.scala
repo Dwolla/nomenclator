@@ -1,7 +1,8 @@
 package com.dwolla.nomenclator.registration
 
-import com.dwolla.nomenclator.model.*
-import com.dwolla.nomenclator.settings.ServiceSettings
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.ecs.model.*
+import com.dwolla.nomenclator.registration.settings.ServiceSettings
 
 /** Registrator's rules for a service's name and tags.
   */

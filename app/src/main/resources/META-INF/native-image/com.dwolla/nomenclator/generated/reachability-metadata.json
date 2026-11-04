@@ -942,7 +942,7 @@
       ]
     },
     {
-      "type": "com.dwolla.nomenclator.aws.ContainerCredentials$",
+      "type": "com.dwolla.nomenclator.ecs.http4s.ContainerCredentials$",
       "fields": [
         {
           "name": "given_Decoder_Fetched$lzy1"
@@ -1367,7 +1367,13 @@
       "type": "io.opentelemetry.contrib.awsxray.propagator.internal.AwsXrayLambdaConfigurablePropagator"
     },
     {
-      "type": "io.opentelemetry.exporter.internal.marshal.VarHandleStringEncoder"
+      "type": "io.opentelemetry.exporter.internal.marshal.VarHandleStringEncoder",
+      "methods": [
+        {
+          "name": "createIfAvailable",
+          "parameterTypes": []
+        }
+      ]
     },
     {
       "type": "io.opentelemetry.exporter.otlp.internal.OtlpMetricExporterProvider"

@@ -1,8 +1,7 @@
 package com.dwolla.nomenclator.plan
 
-import com.dwolla.nomenclator.consul.*
+import com.dwolla.nomenclator.consul.model.*
 import com.dwolla.nomenclator.gen.PlanGen
-import com.dwolla.nomenclator.model.{CheckId, ServiceId}
 import com.dwolla.nomenclator.registration.Check
 import munit.ScalaCheckSuite
 import org.scalacheck.Prop.forAll

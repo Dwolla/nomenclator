@@ -1,10 +1,9 @@
 package com.dwolla.nomenclator.registration
 
 import cats.syntax.all.*
-import com.dwolla.nomenclator.consul.ServiceIds
-import com.dwolla.nomenclator.ecs.*
-import com.dwolla.nomenclator.model.*
-import com.dwolla.nomenclator.settings.*
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.ecs.model.*
+import com.dwolla.nomenclator.registration.settings.*
 
 /** Computes the registrations that the running tasks ask for, following
   * registrator v7's rules. `SERVICE_ID` is not honored: service IDs always have

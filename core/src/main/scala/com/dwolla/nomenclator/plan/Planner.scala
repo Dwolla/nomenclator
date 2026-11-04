@@ -1,8 +1,7 @@
 package com.dwolla.nomenclator.plan
 
-import com.dwolla.nomenclator.consul.*
-import com.dwolla.nomenclator.model.*
-import com.dwolla.nomenclator.registration.Registration
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.registration.*
 
 /** Decides what to write to the agent so that it matches the desired
   * registrations, touching only services this host owns: a desired registration

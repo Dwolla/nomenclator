@@ -3,12 +3,11 @@ package com.dwolla.nomenclator.startup
 import cats.effect.*
 import cats.effect.testkit.TestControl
 import cats.syntax.all.*
-import com.dwolla.nomenclator.consul.AgentState
-import com.dwolla.nomenclator.consul.agent.ConsulAgent
-import com.dwolla.nomenclator.ecs.agent.EcsAgentIntrospection
-import com.dwolla.nomenclator.ecs.{EcsTask, InstanceMetadata}
-import com.dwolla.nomenclator.model.*
-import com.dwolla.nomenclator.registration.Registration
+import com.dwolla.nomenclator.consul.algebra.ConsulAgent
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.ecs.algebra.EcsAgentIntrospection
+import com.dwolla.nomenclator.ecs.model.{EcsTask, InstanceMetadata}
+import com.dwolla.nomenclator.registration.*
 import munit.CatsEffectSuite
 import org.typelevel.log4cats.StructuredLogger
 import org.typelevel.log4cats.testing.StructuredTestingLogger

@@ -3,7 +3,7 @@ package com.dwolla.nomenclator.integration
 import cats.effect.*
 import cats.syntax.all.*
 import com.comcast.ip4s.*
-import com.dwolla.nomenclator.model.TaskArn
+import com.dwolla.nomenclator.ecs.model.TaskArn
 import io.circe.Json
 import io.circe.jawn
 import org.http4s.*

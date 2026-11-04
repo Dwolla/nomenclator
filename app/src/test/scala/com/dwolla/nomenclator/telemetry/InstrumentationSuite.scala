@@ -4,14 +4,16 @@ import cats.data.Kleisli
 import cats.effect.*
 import cats.syntax.all.*
 import com.amazonaws.ecs.*
-import com.dwolla.nomenclator.consul.AgentState
-import com.dwolla.nomenclator.consul.agent.{Http4sConsulAgent, InMemoryConsulAgent}
-import com.dwolla.nomenclator.ecs.*
-import com.dwolla.nomenclator.ecs.agent.InMemoryEcsAgent
-import com.dwolla.nomenclator.ecs.api.CachedTaskDefinitions
-import com.dwolla.nomenclator.model.*
-import com.dwolla.nomenclator.model.Protocol
+import com.dwolla.nomenclator.consul.algebra.InMemoryConsulAgent
+import com.dwolla.nomenclator.consul.http4s.Http4sConsulAgent
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.consul.model.AgentState
+import com.dwolla.nomenclator.ecs.algebra.InMemoryEcsAgent
+import com.dwolla.nomenclator.ecs.model.*
+import com.dwolla.nomenclator.ecs.model.Protocol
+import com.dwolla.nomenclator.ecs.smithy4s.CachedTaskDefinitions
 import com.dwolla.nomenclator.reconcile.*
+import com.dwolla.nomenclator.registration.*
 import com.dwolla.nomenclator.registration.{HostIdentity, Registration}
 import com.dwolla.nomenclator.telemetry.AlgebraAspects.given
 import io.opentelemetry.api.common.Attributes

@@ -3,8 +3,7 @@ package com.dwolla.nomenclator.reconcile
 import cats.effect.*
 import cats.effect.testkit.TestControl
 import cats.syntax.all.*
-import com.dwolla.nomenclator.ecs.TaskDefinitionRef
-import com.dwolla.nomenclator.model.TaskFamily
+import com.dwolla.nomenclator.ecs.model.{TaskDefinitionRef, TaskFamily}
 import com.dwolla.nomenclator.reconcile.DefinitionLookups.*
 import munit.CatsEffectSuite
 

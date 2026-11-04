@@ -1,8 +1,7 @@
 package com.dwolla.nomenclator.plan
 
-import com.dwolla.nomenclator.consul.*
+import com.dwolla.nomenclator.consul.model.*
 import com.dwolla.nomenclator.gen.PlanGen
-import com.dwolla.nomenclator.model.ServiceId
 
 /** A test-only model of a Consul agent, as observed on Consul 1.0.6 and 1.21:
   *   - registering replaces the service, and a registration with a check

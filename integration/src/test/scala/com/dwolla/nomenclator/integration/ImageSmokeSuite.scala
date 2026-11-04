@@ -3,11 +3,12 @@ package com.dwolla.nomenclator.integration
 import cats.effect.*
 import cats.syntax.all.*
 import com.dimafeng.testcontainers.GenericContainer
+import com.dimafeng.testcontainers.GenericContainer.FileSystemBind
+import com.dwolla.nomenclator.consul.algebra.*
+import com.dwolla.nomenclator.consul.http4s.*
+import com.dwolla.nomenclator.consul.model.*
 import com.github.dockerjava.api.command.InspectContainerResponse
 import com.github.dockerjava.api.model.Capability
-import com.dimafeng.testcontainers.GenericContainer.FileSystemBind
-import com.dwolla.nomenclator.consul.agent.*
-import com.dwolla.nomenclator.model.*
 import io.circe.jawn
 import munit.CatsEffectSuite
 import org.http4s.Uri

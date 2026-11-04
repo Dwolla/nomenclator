@@ -1,11 +1,10 @@
 package com.dwolla.nomenclator.registration
 
 import cats.data.NonEmptyChain
-import com.dwolla.nomenclator.consul.ServiceIds
-import com.dwolla.nomenclator.ecs.*
+import com.dwolla.nomenclator.consul.model.*
+import com.dwolla.nomenclator.ecs.model.*
 import com.dwolla.nomenclator.gen.{EcsGen, ModelGen}
-import com.dwolla.nomenclator.model.*
-import com.dwolla.nomenclator.settings.{ContainerSettings, SettingsError}
+import com.dwolla.nomenclator.registration.settings.{ContainerSettings, SettingsError}
 import munit.ScalaCheckSuite
 import org.scalacheck.Gen
 import org.scalacheck.Prop.forAll
