@@ -96,11 +96,24 @@ Each log line is JSON on stdout. At startup the JDK also prints a four-line warn
 Scala older than 3.8, and native-image has no documented switch to silence it, so the smoke suite expects exactly
 that warning and fails on any other output that isn't JSON.
 
+### Publishing
+
+The image is published as `dwolla/nomenclator` on Docker Hub: a multi-architecture index (`linux/amd64` and
+`linux/arm64`) tagged with the version only (there is no `latest` tag). Pushing a `v<version>` git tag runs
+`.github/workflows/image.yml`, which builds each architecture natively, smoke-tests it, and publishes
+`dwolla/nomenclator:<version>`. A published version is never overwritten: the workflow fails if the tag already exists.
+Pull requests and branch pushes build and test the image and publish nothing. The workflow needs the repository secrets
+`DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, a Docker Hub access token with read and write access to `dwolla/nomenclator`
+only.
+
+Deployments pin the index digest (`dwolla/nomenclator@sha256:...`, shown in the publish job's summary), not the tag.
+
 ### Building and checking it
 
 - `scripts/build-image` assembles the jar and builds `nomenclator:local` for the local architecture (native builds
   only, no cross-compiling). native-image needs about 7 GB of free memory.
-- `scripts/check-image` runs `scripts/build-image`, then `ImageSmokeSuite` against that image with the hardening
+- `scripts/check-image` runs `scripts/build-image`, then `ImageSmokeSuite` against that image (or, if
+  `NOMENCLATOR_IMAGE` names an image, skips the build and tests that one) with the hardening
   above, a real Consul agent, and a real OpenTelemetry Collector. It checks that the fixture's services are
   registered within the memory limit, that in shadow mode (the default) it reports them missing and writes nothing,
   that spans and metrics reach the collector, that it registers them again after a Consul outage, that `SIGTERM`

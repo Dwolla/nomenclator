@@ -1,0 +1,197 @@
+# Builds the native-image container for each architecture on a runner of that architecture, smoke-tests it under
+# production's hardening, and, for a v<version> tag only, publishes the multi-arch index
+# docker.io/dwolla/nomenclator:<version>.
+# Pull requests and branch pushes build and test both architectures and push nothing.
+# .mergify.yml requires the check names of the jar and image jobs below; keep them in step.
+name: Image
+
+on:
+  pull_request:
+    branches: ['**', '!update/**', '!pr/**']
+  push:
+    # Bot branches (Scala Steward's update/**, Dependabot's dependabot/**) are tested through their pull requests, so
+    # a push run would build the native image a second time. ci.yml excludes the same update/** and pr/** branches.
+    branches: ['**', '!update/**', '!pr/**', '!dependabot/**']
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+# A newer push to a branch or pull request supersedes a run still building, so that run is cancelled. A tag's run is
+# never cancelled: it may be part-way through publishing a version.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+env:
+  IMAGE: docker.io/dwolla/nomenclator
+
+jobs:
+  jar:
+    name: Assemble jar
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # sbt-typelevel derives the version from git tags
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: sbt
+      - uses: sbt/setup-sbt@b113b960ba361e87e08ce02a390d51871b7ee459 # v1.5.13
+      # Finds the jar as scripts/build-image does (the build definition owns its path) and stages it flat, so the
+      # artifact holds exactly nomenclator.jar: a wildcard upload path would keep the scala-<version>/ directory.
+      - name: Assemble and stage the jar
+        # An explicit bash shell runs with pipefail, so an sbt failure isn't hidden behind tail's success.
+        shell: bash
+        run: |
+          jar="$(sbt -batch -error appJVM/assembly 'print appJVM/assembly/assemblyOutputPath' | tail -n 1)"
+          [[ -f "$jar" ]] || { echo "::error::sbt did not report an existing jar path (got '$jar')"; exit 1; }
+          mkdir -p target/image-context
+          cp "$jar" target/image-context/nomenclator.jar
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nomenclator-jar
+          path: target/image-context/nomenclator.jar
+          if-no-files-found: error
+
+  image:
+    name: Image (${{ matrix.platform }})
+    needs: jar
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    runs-on: ${{ matrix.runner }}
+    # Locally the native build takes about 2 minutes and the smoke suite about 1; this leaves room for slower runners.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: sbt
+      - uses: sbt/setup-sbt@b113b960ba361e87e08ce02a390d51871b7ee459 # v1.5.13
+      # The same layout scripts/build-image stages: the jar alone, as nomenclator.jar.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: nomenclator-jar
+          path: target/image-context
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: target/image-context
+          file: docker/Dockerfile
+          load: true
+          tags: nomenclator:ci
+      - name: Smoke-test the image
+        run: NOMENCLATOR_IMAGE=nomenclator:ci scripts/check-image
+      - name: Show the check log on failure
+        if: failure()
+        run: |
+          if [[ -f target/check-image.log ]]; then
+            cat target/check-image.log
+          else
+            echo "No check log: the job failed before the smoke test ran."
+          fi
+      - name: Log in to Docker Hub
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # Reuses the build cache of the step above, so this only pushes.
+      - name: Push the image by digest
+        id: push
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: target/image-context
+          file: docker/Dockerfile
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+      - name: Export the digest
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - name: Upload the digest
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.runner }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+
+  merge:
+    name: Publish multi-arch index
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+      # A published version is never overwritten, so an index missing an architecture would stay that way. The
+      # download above doesn't fail when only some digest artifacts match, so count them: one per entry of the image
+      # job's matrix.
+      - name: Fail unless both architectures' digests are present
+        run: |
+          shopt -s nullglob
+          digests=("$RUNNER_TEMP"/digests/*)
+          if [[ ${#digests[@]} -ne 2 ]]; then
+            echo "::error::expected 2 image digests (linux/amd64 and linux/arm64), found ${#digests[@]}"
+            exit 1
+          fi
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: type=semver,pattern={{version}}
+          # Only the version tag: a mutable latest would break "a published version is never overwritten".
+          flavor: latest=false
+      # A version tag is immutable: never move a published tag. Fails closed: only buildx's "not found" answer counts
+      # as absent, so a network, auth, or rate-limit failure stops the job instead of letting a tag be overwritten.
+      - name: Fail if the version is already published
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          if output="$(docker buildx imagetools inspect "$IMAGE:$VERSION" 2>&1)"; then
+            echo "::error::$IMAGE:$VERSION already exists; a published version is never overwritten"
+            exit 1
+          elif [[ "$output" == *": not found"* ]]; then
+            echo "$IMAGE:$VERSION is not published yet"
+          else
+            echo "::error::could not tell whether $IMAGE:$VERSION exists: $output"
+            exit 1
+          fi
+      - name: Create the index
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          # shellcheck disable=SC2046 # both substitutions are meant to split into words
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "$IMAGE@sha256:%s " *)
+      - name: Inspect the index
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: docker buildx imagetools inspect "$IMAGE:$VERSION" | tee -a "$GITHUB_STEP_SUMMARY"

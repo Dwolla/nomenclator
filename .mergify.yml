@@ -1,0 +1,25 @@
+# Hand-written: sbt-typelevel 0.8.7's mergify plugin is a separate artifact and cannot name image.yml's checks anyway.
+# The status-success lines are the check names of .github/workflows/ci.yml (generated) and image.yml. The publish job
+# is skipped on pull requests, so it is not required.
+pull_request_rules:
+  - name: automatic merge for Dependabot pull requests
+    conditions:
+      - author~=^dependabot(|-preview)\[bot\]$
+      - status-success=Test (ubuntu-24.04, 3, temurin@25, rootJVM)
+      - status-success=Assemble jar
+      - status-success=Image (linux/amd64)
+      - status-success=Image (linux/arm64)
+    actions:
+      merge:
+        method: squash
+  - name: automatic merge for Scala Steward patch updates
+    conditions:
+      - author~=^dwolla-oss-scala-steward\[bot\]$
+      - body~=labels:.*early-semver-patch
+      - status-success=Test (ubuntu-24.04, 3, temurin@25, rootJVM)
+      - status-success=Assemble jar
+      - status-success=Image (linux/amd64)
+      - status-success=Image (linux/arm64)
+    actions:
+      merge:
+        method: squash

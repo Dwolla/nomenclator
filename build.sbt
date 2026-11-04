@@ -33,6 +33,14 @@ ThisBuild / tlFatalWarnings := true
 // LICENSE covers every source file, so none carries a license header.
 ThisBuild / headerCreate / skip := true
 ThisBuild / headerCheck / skip := true
+ThisBuild / githubWorkflowOSes := Seq("ubuntu-24.04")
+ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("25"))
+// Nothing goes to Maven Central; .github/workflows/image.yml publishes the image.
+ThisBuild / githubWorkflowPublishTargetBranches := Seq.empty
+// With no published library there is no earlier version for MiMa to compare against.
+ThisBuild / tlCiMimaBinaryIssueCheck := false
+// ci.yml uploads no artifacts, so clean.yml would only delete image.yml's, including those of runs still in flight.
+ThisBuild / githubWorkflowIncludeClean := false
 
 val testDependencies = Def.setting(
   Seq(
@@ -59,6 +67,7 @@ lazy val root = tlCrossRootProject
 lazy val core = crossProject(JVMPlatform)
   .crossType(CrossType.Pure)
   .in(file("core"))
+  .enablePlugins(NoPublishPlugin)
   .settings(
     name := "nomenclator-core",
     libraryDependencies ++= Seq(
