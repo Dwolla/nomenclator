@@ -533,6 +533,92 @@ class ReconcilerSuite extends CatsEffectSuite:
       )
     )
 
+  /** The phrases that say how a definition's lookup went.
+    */
+  private val lookupPhrases = List(
+    "lookup failed",
+    "waited behind other lookups",
+    "cut off",
+    "succeeded after failing"
+  )
+
+  /** Each line logged about `ref`'s lookup: its level, and which of
+    * [[lookupPhrases]] it carries.
+    */
+  private def lookupLines(ref: TaskDefinitionRef)(logged: Vector[LogMessage]): Vector[String] =
+    logged
+      .filter(_.ctx.get("task_definition").contains(ref.value))
+      .map: m =>
+        val level = m match
+          case _: WARN => "WARN"
+          case _: INFO => "INFO"
+          case _       => "other"
+        s"$level ${lookupPhrases.filter(m.message.contains).mkString(", ")}"
+
+  test(
+    "a lookup that got no full turn is logged at INFO for what happened, not as a failure"
+  ):
+    // Two rounds time out on their own, the deadline cuts off the third,
+    // and the last four never start.
+    val hung = hungTasks(16).map(_.definition)
+    val program = for
+      w <- world(hungTasks(16), Map.empty)
+      _ <- hung.traverse_(w.defs.hang)
+      _ <- passes(w, 1)()
+      logged <- w.logger.logged
+    yield logged
+
+    underFixedSeed(program).map: logged =>
+      assertEquals(
+        hung.map(ref => lookupLines(ref)(logged)),
+        List.fill(8)(Vector("WARN lookup failed")) ++
+          List.fill(4)(Vector("INFO cut off")) ++
+          List.fill(4)(Vector("INFO waited behind other lookups"))
+      )
+
+  test(
+    "a definition whose lookup only waited isn't logged as succeeding after failing"
+  ):
+    // foo, listed after twelve hung lookups, never starts in the first pass,
+    // and answers in the second.
+    val hung = hungTasks(12)
+    val program = for
+      w <- world(hung :+ foo, Map(fooRef -> plain))
+      _ <- hung.traverse_(t => w.defs.hang(t.definition))
+      _ <- passes(w, 2)()
+      logged <- w.logger.logged
+    yield logged
+
+    underFixedSeed(program).map(logged =>
+      assertEquals(
+        lookupLines(fooRef)(logged),
+        Vector("INFO waited behind other lookups")
+      )
+    )
+
+  test(
+    "a definition that failed, then got no full turn, is logged as succeeding once it answers"
+  ):
+    // foo fails in the first pass, hangs in the second until the deadline
+    // cuts it off behind sixteen hung lookups, and answers in the third.
+    val hung = hungTasks(16)
+    val program = for
+      w <- world(foo :: hung, Map.empty)
+      _ <- hung.traverse_(t => w.defs.hang(t.definition))
+      _ <- passes(w, 3)(i =>
+        w.defs.hang(fooRef).whenA(i == 0) >>
+          w.defs.answer(fooRef, plain).whenA(i == 1)
+      )
+      logged <- w.logger.logged
+    yield logged
+
+    underFixedSeed(program).map(logged =>
+      assertEquals(
+        lookupLines(fooRef)(logged),
+        Vector("WARN lookup failed", "INFO succeeded after failing")
+      )
+    )
+
   test("definitions are looked up only for running tasks"):
     val stopping = bar.copy(desiredStatus = TaskStatus.Stopped)
     val program = for

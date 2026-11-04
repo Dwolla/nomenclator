@@ -66,7 +66,7 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
       { case Entry.DependencyFailing(d) => d },
       Entry.DependencyFailing(_),
       forgetUnattempted = false
-    ).flatMap: (started, recovered) =>
+    ).flatMap: (started, recovered, _) =>
       started.traverse_ : (d, e) =>
         logger.warn(Map("dependency" -> d.label), e)(
           s"Reading the ${d.label} failed; nothing is written until it succeeds"
@@ -90,7 +90,7 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
       { case Entry.PassTimingOut => () },
       _ => Entry.PassTimingOut,
       forgetUnattempted = false
-    ).flatMap: (started, recovered) =>
+    ).flatMap: (started, recovered, _) =>
       started.traverse_ : (_, e) =>
         logger.warn(
           s"${e.getMessage}; writes it had not made are retried on the next pass"
@@ -103,15 +103,25 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
     * a modeled error: a failure while describing a task definition could carry
     * part of its environment, which may hold secrets, and an unrecognized
     * answer's message embeds its headers and body.
+    *
+    * A lookup that got no full turn says nothing about its definition, so it
+    * neither starts nor clears a failure. It is logged on its own, at INFO,
+    * unless its definition is already remembered as failing.
     */
   def definitionLookups(results: List[(TaskDefinitionRef, Either[Throwable, ?])]): F[Unit] =
+    val noFullTurn = results.collect:
+      case (ref, Left(e: DefinitionLookups.NoFullTurn)) => ref -> e
+    val fullTurns = results.filterNot((_, result) => result.left.exists(_.isInstanceOf[DefinitionLookups.NoFullTurn]))
     failures(
-      results.map((ref, result) => ref -> result.void),
+      fullTurns.map((ref, result) => ref -> result.void),
       { case Entry.DefinitionFailing(ref) => ref },
       Entry.DefinitionFailing(_),
-      forgetUnattempted = true
-    ).flatMap: (started, recovered) =>
-      started.traverse_ : (ref, e) =>
+      forgetUnattempted = true,
+      inconclusive = noFullTurn.map(_._1)
+    ).flatMap: (started, recovered, notFailing) =>
+      noFullTurn
+        .filter((ref, _) => notFailing.contains(ref))
+        .traverse_(logNoFullTurn) >> started.traverse_ : (ref, e) =>
         logger.warn(
           Map(
             "task_definition" -> ref.value,
@@ -125,6 +135,19 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
           "Task definition lookup succeeded after failing"
         )
       )
+  end definitionLookups
+
+  private def logNoFullTurn(ref: TaskDefinitionRef, noFullTurn: DefinitionLookups.NoFullTurn): F[Unit] =
+    val context = Map("task_definition" -> ref.value)
+    noFullTurn match
+      case DefinitionLookups.NotStarted(_) =>
+        logger.info(context)(
+          "Task definition lookup waited behind other lookups until the lookup phase's deadline; its tasks wait, and their existing registrations are kept"
+        )
+      case DefinitionLookups.CutOff(_) =>
+        logger.info(context)(
+          "Task definition lookup was cut off at the lookup phase's deadline, before its own timeout; its tasks wait, and their existing registrations are kept"
+        )
 
   /** Records the writes made to the Consul agent this pass. An ID written twice
     * (a replacement that did not fully succeed) is failing if either write
@@ -140,7 +163,7 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
       { case Entry.WriteFailing(id) => id },
       Entry.WriteFailing(_),
       forgetUnattempted = true
-    ).flatMap: (started, recovered) =>
+    ).flatMap: (started, recovered, _) =>
       started.traverse_ : (id, e) =>
         logger.warn(Map("service_id" -> id.value), e)(
           "Consul agent write failed; retrying on the next pass"
@@ -167,31 +190,34 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
         (appeared, cleared)
       )
 
-  /** Remembers which of `results` failed, and returns the failures that started
-    * and the keys that succeeded after failing. A remembered failure that
-    * wasn't attempted is forgotten when `forgetUnattempted`, and kept
-    * otherwise.
+  /** Remembers which of `results` failed, and returns the failures that
+    * started, the keys that succeeded after failing, and the `inconclusive`
+    * keys not remembered as failing. An inconclusive key was attempted, but its
+    * result says nothing either way, so whether it is remembered as failing
+    * doesn't change. A remembered failure that wasn't attempted is forgotten
+    * when `forgetUnattempted`, and kept otherwise.
     */
   private def failures[K](
                            results: List[(K, Either[Throwable, Unit])],
                            select: PartialFunction[Entry, K],
                            entry: K => Entry,
-                           forgetUnattempted: Boolean
-  ): F[(List[(K, Throwable)], List[K])] =
+                           forgetUnattempted: Boolean,
+                           inconclusive: List[K] = Nil
+  ): F[(List[(K, Throwable)], List[K], List[K])] =
     logged.modify: all =>
       val previous = all.collect(select)
       val failed = results.collect:
         case (k, Left(e)) => k -> e
       val succeeded = results.collect:
         case (k, Right(_)) => k
-      val attempted = results.map(_._1).toSet
+      val attempted = results.map(_._1).toSet ++ inconclusive
       val started = failed.filterNot((k, _) => previous(k))
       val recovered = succeeded.filter(previous)
       val forgotten =
         if (forgetUnattempted) previous.filterNot(attempted) else Set.empty
       (
         all -- (recovered ++ forgotten).map(entry) ++ failed.map((k, _) => entry(k)),
-        (started, recovered)
+        (started, recovered, inconclusive.filterNot(previous))
       )
 
   private def logSkip(s: Skipped): F[Unit] =
