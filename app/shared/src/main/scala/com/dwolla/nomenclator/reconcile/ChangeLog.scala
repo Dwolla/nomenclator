@@ -9,6 +9,7 @@ import com.dwolla.nomenclator.plan.Difference
 import com.dwolla.nomenclator.registration.*
 import com.dwolla.nomenclator.settings.SettingsError
 import org.typelevel.log4cats.StructuredLogger
+import smithy4s.http.UnknownErrorResponse
 
 /** Logs what changed between passes rather than everything on every pass. It
   * remembers what it has logged that still holds: a skip, a difference, or a
@@ -98,8 +99,10 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
   end passFinished
 
   /** Records the task definition lookups made this pass. Only the error's type
-    * is logged: a failure while describing a task definition could carry part
-    * of its environment, which may hold secrets.
+    * is logged, plus the HTTP status of an answer the client couldn't decode as
+    * a modeled error: a failure while describing a task definition could carry
+    * part of its environment, which may hold secrets, and an unrecognized
+    * answer's message embeds its headers and body.
     */
   def definitionLookups(results: List[(TaskDefinitionRef, Either[Throwable, ?])]): F[Unit] =
     failures(
@@ -113,7 +116,7 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
           Map(
             "task_definition" -> ref.value,
             "error_type" -> e.getClass.getName
-          )
+          ) ++ httpStatus(e)
         )(
           "Task definition lookup failed; its tasks wait, and their existing registrations are kept"
         )
@@ -226,6 +229,12 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
 end ChangeLog
 
 object ChangeLog:
+
+  private def httpStatus(e: Throwable): Map[String, String] =
+    e match
+      case UnknownErrorResponse(status, _, _) =>
+        Map("status" -> status.toString)
+      case _ => Map.empty
 
   /** What a pass reads before it can plan.
     */

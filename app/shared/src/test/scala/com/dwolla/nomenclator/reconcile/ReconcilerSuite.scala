@@ -15,6 +15,7 @@ import com.dwolla.nomenclator.registration.HostIdentity
 import com.dwolla.nomenclator.settings.ContainerSettings
 import fs2.Stream
 import munit.CatsEffectSuite
+import smithy4s.http.UnknownErrorResponse
 import org.typelevel.log4cats.StructuredLogger
 import org.typelevel.log4cats.testing.StructuredTestingLogger
 import org.typelevel.log4cats.testing.StructuredTestingLogger.*
@@ -438,6 +439,36 @@ class ReconcilerSuite extends CatsEffectSuite:
         assertEquals(warnings(logged).size, 1, logged.toString)
         assert(
           logged.forall(m => m.throwOpt.isEmpty && !(m.message + m.ctx).contains("hunter2")),
+          logged.toString
+        )
+
+  test(
+    "an unrecognized AWS error answer is logged with its HTTP status but not its body"
+  ):
+    val program = for
+      w <- world(
+        List(foo, bar),
+        Map(fooRef -> plain),
+        AgentState(List(agentService(barId, "bar-worker", 32769)), Nil)
+      )
+      _ <- w.defs.fail(
+        barRef,
+        UnknownErrorResponse(400, Map.empty, "DB_PASSWORD=hunter2")
+      )
+      _ <- passes(w, 1)()
+      logged <- w.logger.logged
+    yield logged
+
+    TestControl
+      .executeEmbed(program)
+      .map: logged =>
+        assertEquals(
+          warnings(logged).flatMap(_.ctx.get("status")),
+          Vector("400"),
+          logged.toString
+        )
+        assert(
+          !logged.exists(m => (m.message + m.ctx).contains("hunter2")),
           logged.toString
         )
 
