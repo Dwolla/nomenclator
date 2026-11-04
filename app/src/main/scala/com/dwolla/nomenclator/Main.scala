@@ -8,6 +8,10 @@ import org.slf4j.bridge.SLF4JBridgeHandler
   * first argument names the deployment environment.
   */
 object Main extends IOApp:
+
+  /** Runs the daemon until it is interrupted. Documented here so scaladoc does
+    * not inherit `IOApp.run`'s doc, whose `@see` link does not resolve.
+    */
   override def run(args: List[String]): IO[ExitCode] =
     // The OpenTelemetry SDK logs its own problems through JUL; this sends
     // them to the same JSON log as everything else.

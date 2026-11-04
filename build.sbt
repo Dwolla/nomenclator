@@ -30,26 +30,49 @@ ThisBuild / tlBaseVersion := "0.1"
 ThisBuild / scalaVersion := "3.9.0"
 ThisBuild / crossScalaVersions := Seq("3.9.0")
 ThisBuild / tlFatalWarnings := true
-// LICENSE covers every source file, so none carries a license header.
-ThisBuild / headerCreate / skip := true
-ThisBuild / headerCheck / skip := true
 ThisBuild / githubWorkflowOSes := Seq("ubuntu-24.04")
 ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("25"))
 // Nothing goes to Maven Central; .github/workflows/image.yml publishes the image.
 ThisBuild / githubWorkflowPublishTargetBranches := Seq.empty
-// With no published library there is no earlier version for MiMa to compare against.
-ThisBuild / tlCiMimaBinaryIssueCheck := false
+ThisBuild / tlCiScalafmtCheck := true
+ThisBuild / tlCiDocCheck := true
+// A Dependabot branch push would run CI a second time beside its pull request.
+ThisBuild / githubWorkflowTargetBranches ++= Seq("!dependabot/**")
+// Version tags run ci.yml so a release is built and tested.
+ThisBuild / githubWorkflowTargetTags ++= Seq("v*")
 // ci.yml uploads no artifacts, so clean.yml would only delete image.yml's, including those of runs still in flight.
 ThisBuild / githubWorkflowIncludeClean := false
 
-val testDependencies = Def.setting(
-  Seq(
-    "org.scalameta" %%% "munit" % munitVersion,
-    "org.scalameta" %%% "munit-scalacheck" % munitScalaCheckVersion,
-    "org.typelevel" %%% "munit-cats-effect" % munitCatsEffectVersion,
-    "org.typelevel" %%% "cats-effect-testkit" % catsEffectVersion
-  ).map(_ % Test)
+// The checks a pull request must pass: ci.yml's test job and image.yml's build jobs.
+val imageChecks =
+  Seq("Assemble jar", "Image (linux/amd64)", "Image (linux/arm64)")
+ThisBuild / mergifyStewardConfig := Some(
+  MergifyStewardConfig()
+    .withName("automatic merge for Scala Steward patch updates")
+    .withAuthor("dwolla-oss-scala-steward[bot]")
+    .withAction(MergifyAction.Merge(method = Some("squash")))
 )
+ThisBuild / mergifySuccessConditions ++= imageChecks.map(check => MergifyCondition.Custom(s"status-success=$check"))
+// Major bumps wait for a person: image.yml publishes only on tags, so a pull
+// request's CI never exercises a major bump to the login, metadata, or push actions.
+ThisBuild / mergifyPrRules += MergifyPrRule(
+  "automatic merge for Dependabot pull requests",
+  List(
+    MergifyCondition.Custom("author~=^dependabot(|-preview)\\[bot\\]$"),
+    MergifyCondition.Custom(
+      "dependabot-update-type!=version-update:semver-major"
+    )
+  ) ++ (ThisBuild / mergifySuccessConditions).value,
+  List(MergifyAction.Merge(method = Some("squash")))
+)
+ThisBuild / mergifyLabelPaths := Map.empty
+
+val testDependencies = Seq(
+  "org.scalameta" %% "munit" % munitVersion,
+  "org.scalameta" %% "munit-scalacheck" % munitScalaCheckVersion,
+  "org.typelevel" %% "munit-cats-effect" % munitCatsEffectVersion,
+  "org.typelevel" %% "cats-effect-testkit" % catsEffectVersion
+).map(_ % Test)
 
 val integrationTestDependencies = Seq(
   "org.scalameta" %% "munit" % munitVersion,
@@ -60,25 +83,24 @@ val integrationTestDependencies = Seq(
   "org.http4s" %% "http4s-ember-server" % http4sVersion
 ).map(_ % Test)
 
-lazy val root = tlCrossRootProject
+lazy val root = project
+  .in(file("."))
   .aggregate(core, app, integration)
   .enablePlugins(NoPublishPlugin)
 
-lazy val core = crossProject(JVMPlatform)
-  .crossType(CrossType.Pure)
+lazy val core = project
   .in(file("core"))
   .enablePlugins(NoPublishPlugin)
   .settings(
     name := "nomenclator-core",
     libraryDependencies ++= Seq(
-      "org.typelevel" %%% "cats-effect" % catsEffectVersion,
-      "co.fs2" %%% "fs2-core" % fs2Version,
-      "com.comcast" %%% "ip4s-core" % ip4sVersion
-    ) ++ testDependencies.value
+      "org.typelevel" %% "cats-effect" % catsEffectVersion,
+      "co.fs2" %% "fs2-core" % fs2Version,
+      "com.comcast" %% "ip4s-core" % ip4sVersion
+    ) ++ testDependencies
   )
 
-lazy val app = crossProject(JVMPlatform)
-  .crossType(CrossType.Full)
+lazy val app = project
   .in(file("app"))
   .enablePlugins(Smithy4sCodegenPlugin, BuildInfoPlugin, NoPublishPlugin)
   .dependsOn(core % "compile->compile;test->test")
@@ -86,30 +108,24 @@ lazy val app = crossProject(JVMPlatform)
     name := "nomenclator-app",
     buildInfoKeys := Seq[BuildInfoKey](version),
     buildInfoPackage := "com.dwolla.nomenclator",
-    // Smithy sources are shared across platforms, so they live under app/shared.
-    Compile / smithy4sInputDirs := Seq(
-      (ThisBuild / baseDirectory).value / "app" / "shared" / "src" / "main" / "smithy"
-    ),
     smithy4sAwsSpecs ++= Seq(AWS.ecs),
     libraryDependencies ++= Seq(
-      "com.disneystreaming.smithy4s" %%% "smithy4s-aws-http4s" % smithy4sVersion,
-      "org.http4s" %%% "http4s-ember-client" % http4sVersion,
-      "org.http4s" %%% "http4s-circe" % http4sVersion,
-      "org.typelevel" %%% "log4cats-core" % log4catsVersion,
-      "is.cir" %%% "ciris" % cirisVersion,
-      "org.typelevel" %%% "otel4s-core-trace" % otel4sVersion,
-      "org.typelevel" %%% "otel4s-core-metrics" % otel4sVersion,
-      "com.dwolla" %%% "otel4s-tagless" % otel4sTaglessVersion,
-      "com.dwolla" %%% "otel4s-tagless-metrics" % otel4sTaglessVersion,
-      "com.dwolla" %%% "otel4s-smithy4s" % otel4sSmithy4sVersion,
-      "com.dwolla" %%% "otel4s-smithy4s-metrics" % otel4sSmithy4sVersion,
-      "io.circe" %%% "circe-literal" % circeVersion % Test,
-      "org.typelevel" %%% "log4cats-testing" % log4catsVersion % Test
-    ) ++ testDependencies.value,
+      "com.disneystreaming.smithy4s" %% "smithy4s-aws-http4s" % smithy4sVersion,
+      "org.http4s" %% "http4s-ember-client" % http4sVersion,
+      "org.http4s" %% "http4s-circe" % http4sVersion,
+      "org.typelevel" %% "log4cats-core" % log4catsVersion,
+      "is.cir" %% "ciris" % cirisVersion,
+      "org.typelevel" %% "otel4s-core-trace" % otel4sVersion,
+      "org.typelevel" %% "otel4s-core-metrics" % otel4sVersion,
+      "com.dwolla" %% "otel4s-tagless" % otel4sTaglessVersion,
+      "com.dwolla" %% "otel4s-tagless-metrics" % otel4sTaglessVersion,
+      "com.dwolla" %% "otel4s-smithy4s" % otel4sSmithy4sVersion,
+      "com.dwolla" %% "otel4s-smithy4s-metrics" % otel4sSmithy4sVersion,
+      "io.circe" %% "circe-literal" % circeVersion % Test,
+      "org.typelevel" %% "log4cats-testing" % log4catsVersion % Test
+    ) ++ testDependencies,
     // smithy4s generates identifiers containing `$` (e.g. `$Unknown`), which Scala 3 warns about.
-    scalacOptions += "-Wconf:src=.*/src_managed/.*:silent"
-  )
-  .jvmSettings(
+    scalacOptions += "-Wconf:src=.*/src_managed/.*:silent",
     libraryDependencies ++= Seq(
       "com.dwolla" %% "dwolla-otel4s-oteljava" % dwollaOtel4sVersion,
       "com.dwolla" %% "dwolla-otel4s-oteljava-aws-ecs" % dwollaOtel4sVersion,
@@ -143,7 +159,7 @@ lazy val app = crossProject(JVMPlatform)
 lazy val integration = project
   .in(file("integration"))
   .enablePlugins(NoPublishPlugin)
-  .dependsOn(app.jvm % "test->test")
+  .dependsOn(app % "test->test")
   .settings(
     name := "nomenclator-integration",
     libraryDependencies ++= integrationTestDependencies
@@ -151,5 +167,5 @@ lazy val integration = project
 
 addCommandAlias(
   "check",
-  "scalafmtSbtCheck; scalafmtCheckAll; test"
+  "scalafmtSbtCheck; scalafmtCheckAll; githubWorkflowCheck; Compile/doc; test"
 )

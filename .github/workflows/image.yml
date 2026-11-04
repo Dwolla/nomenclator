@@ -47,7 +47,7 @@ jobs:
         # An explicit bash shell runs with pipefail, so an sbt failure isn't hidden behind tail's success.
         shell: bash
         run: |
-          jar="$(sbt -batch -error appJVM/assembly 'print appJVM/assembly/assemblyOutputPath' | tail -n 1)"
+          jar="$(sbt -batch -error app/assembly 'print app/assembly/assemblyOutputPath' | tail -n 1)"
           [[ -f "$jar" ]] || { echo "::error::sbt did not report an existing jar path (got '$jar')"; exit 1; }
           mkdir -p target/image-context
           cp "$jar" target/image-context/nomenclator.jar

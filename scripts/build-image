@@ -42,8 +42,8 @@ started=$SECONDS
 
 # Ask sbt for the jar's path so the build definition stays the one source of truth for it. With -error, the only
 # stdout line is the printed path.
-sbt -batch -error appJVM/assembly 'print appJVM/assembly/assemblyOutputPath' > "$log.sbt" 2>> "$log" \
-  || { cat "$log.sbt" >> "$log"; fail "sbt appJVM/assembly"; }
+sbt -batch -error app/assembly 'print app/assembly/assemblyOutputPath' > "$log.sbt" 2>> "$log" \
+  || { cat "$log.sbt" >> "$log"; fail "sbt app/assembly"; }
 cat "$log.sbt" >> "$log"
 jar="$(tail -n 1 "$log.sbt")"
 rm -f "$log.sbt"

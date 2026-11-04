@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regenerates the GraalVM reachability metadata in
-# app/jvm/src/main/resources/META-INF/native-image/com.dwolla/nomenclator/generated/ from one scripted run of the
+# app/src/main/resources/META-INF/native-image/com.dwolla/nomenclator/generated/ from one scripted run of the
 # agent, under the native-image tracing agent, inside docker/Dockerfile's `toolchain` stage (the image build's
 # toolchain, so its digest is pinned in one place).
 #
@@ -41,7 +41,7 @@ cd "$(dirname "$0")/.."
 root="$PWD"
 mkdir -p target
 log="target/native-image-metadata.log"
-generated="app/jvm/src/main/resources/META-INF/native-image/com.dwolla/nomenclator/generated"
+generated="app/src/main/resources/META-INF/native-image/com.dwolla/nomenclator/generated"
 staging="$root/target/native-image-metadata"
 
 toolchain_image="nomenclator-toolchain:local"
@@ -118,7 +118,7 @@ reconcile_spans() { matches "$collector" 'Name  *: reconcile$'; }
 spans_at_least() { [[ "$(reconcile_spans)" -ge "$1" ]]; }
 
 note "building the jar and reading the classpath of the fakes"
-sbt -batch -error appJVM/assembly 'print appJVM/assembly/assemblyOutputPath' \
+sbt -batch -error app/assembly 'print app/assembly/assemblyOutputPath' \
     'export integration/Test/fullClasspath' > "$log.sbt" 2>> "$log" \
   || { cat "$log.sbt" >> "$log"; rm -f "$log.sbt"; fail "sbt"; }
 cat "$log.sbt" >> "$log"

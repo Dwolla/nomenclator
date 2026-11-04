@@ -55,7 +55,7 @@ introspection fixtures, and fake AWS endpoints. Nothing touches AWS; the credent
    ```sh
    export CONSUL_HTTP_ADDR=127.0.0.1:<port> NOMENCLATOR_HOSTNAME=smoke-host
    export OTEL_TRACES_EXPORTER=none OTEL_METRICS_EXPORTER=none
-   NOMENCLATOR_MODE=shadow sbt "appJVM/run Local"
+   NOMENCLATOR_MODE=shadow sbt "app/run Local"
    ```
 
    Expected: JSON log lines, starting with `Nomenclator is starting` and the effective configuration, then
@@ -65,7 +65,7 @@ introspection fixtures, and fake AWS endpoints. Nothing touches AWS; the credent
 4. Run in apply mode:
 
    ```sh
-   NOMENCLATOR_MODE=apply sbt "appJVM/run Local"
+   NOMENCLATOR_MODE=apply sbt "app/run Local"
    ```
 
    Expected: a `Consul agent change: register` line for each service, and the three `smoke-host:` services in
@@ -78,7 +78,7 @@ introspection fixtures, and fake AWS endpoints. Nothing touches AWS; the credent
 The image holds one mostly static native executable (glibc from the base image), `/app/nomenclator`, with the JDK
 library it loads beside it (`/app/libmanagement_ext.so`), on a distroless `base-debian12:nonroot` base. It is built with
 Mandrel (GraalVM's native-image) from the assembly jar, so it has no JVM and no shell. The native-image flags live in
-`app/jvm/src/main/resources/META-INF/native-image/com.dwolla/nomenclator/native-image.properties`, and the reflection
+`app/src/main/resources/META-INF/native-image/com.dwolla/nomenclator/native-image.properties`, and the reflection
 and resource metadata the executable needs lives next to them in `generated/`.
 
 ### Runtime requirements

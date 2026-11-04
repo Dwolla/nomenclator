@@ -9,9 +9,9 @@ name: Continuous Integration
 
 on:
   pull_request:
-    branches: ['**', '!update/**', '!pr/**']
+    branches: ['**', '!update/**', '!pr/**', '!dependabot/**']
   push:
-    branches: ['**', '!update/**', '!pr/**']
+    branches: ['**', '!update/**', '!pr/**', '!dependabot/**']
     tags: [v*]
 
 env:
@@ -30,7 +30,6 @@ jobs:
         os: [ubuntu-24.04]
         scala: [3]
         java: [temurin@25]
-        project: [rootJVM]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
@@ -58,16 +57,16 @@ jobs:
       - name: Check that workflows are up to date
         run: sbt githubWorkflowCheck
 
-      - name: Check headers and formatting
+      - name: Check formatting
         if: matrix.java == 'temurin@25' && matrix.os == 'ubuntu-24.04'
-        run: sbt 'project ${{ matrix.project }}' '++ ${{ matrix.scala }}' headerCheckAll scalafmtCheckAll 'project /' scalafmtSbtCheck
+        run: sbt '++ ${{ matrix.scala }}' scalafmtCheckAll 'project /' scalafmtSbtCheck
 
       - name: Test
-        run: sbt 'project ${{ matrix.project }}' '++ ${{ matrix.scala }}' test
+        run: sbt '++ ${{ matrix.scala }}' test
 
       - name: Generate API documentation
         if: matrix.java == 'temurin@25' && matrix.os == 'ubuntu-24.04'
-        run: sbt 'project ${{ matrix.project }}' '++ ${{ matrix.scala }}' doc
+        run: sbt '++ ${{ matrix.scala }}' doc
 
   dependency-submission:
     name: Submit Dependencies
@@ -102,5 +101,5 @@ jobs:
       - name: Submit Dependencies
         uses: scalacenter/sbt-dependency-submission@v2
         with:
-          modules-ignore: nomenclator-app_3 nomenclator-integration_3 rootjs_3 nomenclator-core_3 rootjvm_3 rootnative_3
+          modules-ignore: root_3 nomenclator-core_3 nomenclator-app_3 nomenclator-integration_3
           configs-ignore: test scala-tool scala-doc-tool test-internal
