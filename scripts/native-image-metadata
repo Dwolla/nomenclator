@@ -45,8 +45,8 @@ generated="app/jvm/src/main/resources/META-INF/native-image/com.dwolla/nomenclat
 staging="$root/target/native-image-metadata"
 
 toolchain_image="nomenclator-toolchain:local"
-consul_image="hashicorp/consul:1.21"
-collector_image="otel/opentelemetry-collector:0.164.0"
+consul_image="$(<integration/src/test/resources/consul.image)" # shared with ConsulVersions.current
+collector_image="$(<integration/src/test/resources/otel-collector.image)" # shared with ImageSmokeSuite
 suffix="$$"
 consul="nomenclator-metadata-consul-$suffix"
 collector="nomenclator-metadata-collector-$suffix"

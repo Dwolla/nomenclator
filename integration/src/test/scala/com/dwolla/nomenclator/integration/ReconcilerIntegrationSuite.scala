@@ -27,11 +27,9 @@ import scala.concurrent.duration.*
 class ReconcilerIntegrationSuite extends CatsEffectSuite:
   override def munitIOTimeout: Duration = 3.minutes
 
-  private val address = ServiceAddress("10.0.0.1")
-  private val host = HostIdentity(
-    HostName.from("test-host").fold(fail(_), identity),
-    address
-  )
+  import FixtureServices.{address, barTcp, barUdp, fooWeb}
+
+  private val host = HostIdentity(FixtureServices.hostName, address)
 
   private val fooRef = TaskDefinitionRef(TaskFamily("foo-service"), 3)
   private val barRef = TaskDefinitionRef(TaskFamily("bar-worker"), 12)
@@ -39,15 +37,6 @@ class ReconcilerIntegrationSuite extends CatsEffectSuite:
   private val barTask =
     TaskArn(
       "arn:aws:ecs:us-east-1:123456789012:task/example/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    )
-
-  private val fooWeb =
-    ServiceId("test-host:ecs-foo-service-3-web-a1b2c3d4e5f6a7b8c9d0:8080")
-  private val barTcp =
-    ServiceId("test-host:ecs-bar-worker-12-worker-0a1b2c3d4e5f6a7b8c9d:9000")
-  private val barUdp =
-    ServiceId(
-      "test-host:ecs-bar-worker-12-worker-0a1b2c3d4e5f6a7b8c9d:9001:udp"
     )
 
   // An empty and a duplicate tag: registrator sends them as they are.

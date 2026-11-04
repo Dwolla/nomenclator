@@ -73,6 +73,52 @@ introspection fixtures, and fake AWS endpoints. Nothing touches AWS; the credent
 
 5. Clean up: stop the fakes with Ctrl-C, then `docker rm -f nomenclator-smoke-consul`.
 
+## Container image
+
+The image holds one mostly static native executable (glibc from the base image), `/app/nomenclator`, with the JDK
+library it loads beside it (`/app/libmanagement_ext.so`), on a distroless `base-debian12:nonroot` base. It is built with
+Mandrel (GraalVM's native-image) from the assembly jar, so it has no JVM and no shell. The native-image flags live in
+`app/jvm/src/main/resources/META-INF/native-image/com.dwolla/nomenclator/native-image.properties`, and the reflection
+and resource metadata the executable needs lives next to them in `generated/`.
+
+### Runtime requirements
+
+The image is tested, and meant to run, as ECS runs it:
+
+- the command is the deployment environment (`Local`, `DevInt`, `Uat`, `Prod`, `Sandbox`, or `Admin`); the entrypoint
+  is `/app/nomenclator`;
+- host networking, which is how it reaches the ECS agent and the local Consul agent;
+- a read-only root filesystem, user 65532, and every capability dropped;
+- a memory limit of 80 MiB, and no swap (the executable caps its own heap at 64 MiB).
+
+Each log line is JSON on stdout. At startup the JDK also prints a four-line warning to stderr, that
+`sun.misc.Unsafe::objectFieldOffset` was called by `scala.runtime.LazyVals$`. It comes from dependencies compiled with a
+Scala older than 3.8, and native-image has no documented switch to silence it, so the smoke suite expects exactly
+that warning and fails on any other output that isn't JSON.
+
+### Building and checking it
+
+- `scripts/build-image` assembles the jar and builds `nomenclator:local` for the local architecture (native builds
+  only, no cross-compiling). native-image needs about 7 GB of free memory.
+- `scripts/check-image` runs `scripts/build-image`, then `ImageSmokeSuite` against that image with the hardening
+  above, a real Consul agent, and a real OpenTelemetry Collector. It checks that the fixture's services are
+  registered within the memory limit, that in shadow mode (the default) it reports them missing and writes nothing,
+  that spans and metrics reach the collector, that it registers them again after a Consul outage, that `SIGTERM`
+  stops it promptly without deregistering anything, that it reaches the real ECS API over TLS (the made-up
+  credentials get an unrecognized answer from AWS, and the logged HTTP status must be a 4xx), and that a malformed
+  setting makes it exit quickly. It needs no AWS credentials. The suite is skipped by `scripts/check` because that
+  has no image.
+- `scripts/native-image-metadata` regenerates `generated/` from one scripted run under the tracing agent. Run it
+  after a dependency upgrade, or after changing how Nomenclator calls HTTP, JSON, AWS, or telemetry. The executable
+  only has the reflection and resources the run exercised, so a path the run didn't take fails only in the image, with
+  a `MissingReflectionRegistrationError` or a decoding failure. Extend the script's scenario and rerun it; never edit
+  `generated/` by hand.
+
+The tests and the metadata script run the image with `--network host`, so on Docker Desktop (4.34 or later) turn on
+host networking first: Settings, Resources, Network, "Enable host networking". Linux has it natively. Docker Desktop's
+host networking refuses IPv6 sockets to the host's loopback, which the JDK uses by default, so the smoke suite passes
+`-Djava.net.preferIPv4Stack=true` to the executable there. See `HardenedContainer`; the image itself sets nothing.
+
 ## License
 
 MIT; see [LICENSE](LICENSE).

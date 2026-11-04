@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Builds the image for the local architecture (scripts/build-image), then runs the image smoke suite against it: the
+# container under production's hardening, against a real Consul agent and OpenTelemetry Collector.
+# Needs Docker with host networking (Docker Desktop 4.34 or later: Settings, Resources, Network) and what
+# scripts/build-image needs. Full output goes to target/check-image.log; its path is printed if the check fails.
+set -euo pipefail
+
+usage() {
+  cat <<USAGE
+Usage: scripts/check-image
+
+Runs scripts/build-image, then ImageSmokeSuite against the image it built (nomenclator:local).
+
+  -h, --help    show this help
+USAGE
+}
+
+case "${1:-}" in
+  "") ;;
+  -h|--help) usage; exit 0 ;;
+  *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
+esac
+
+cd "$(dirname "$0")/.."
+mkdir -p target
+log="target/check-image.log"
+image="nomenclator:local"
+
+fail() {
+  echo "check-image FAILED: $1; full log: $PWD/$log" >&2
+  exit 1
+}
+
+: > "$log"
+scripts/build-image --tag "$image" 2>&1 | tee -a "$log" || fail "scripts/build-image"
+
+NOMENCLATOR_IMAGE="$image" sbt -batch 'integration/testOnly com.dwolla.nomenclator.integration.ImageSmokeSuite' \
+  >> "$log" 2>&1 || fail "ImageSmokeSuite"
+
+# A skipped test would mean the suite never ran against the image.
+summary="$(grep -E 'Passed: Total' "$log" | tail -n 1 | sed 's/\x1b\[[0-9;]*m//g' || true)"
+[[ -n "$summary" ]] || fail "sbt printed no test summary"
+echo "$summary"
+[[ "$summary" == *"Failed 0, Errors 0"* && "$summary" != *"Skipped"* ]] \
+  || fail "the suite did not run every test"
+echo "check-image passed; log: $PWD/$log"

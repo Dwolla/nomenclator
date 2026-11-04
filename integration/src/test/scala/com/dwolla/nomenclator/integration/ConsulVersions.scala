@@ -1,5 +1,8 @@
 package com.dwolla.nomenclator.integration
 
+import scala.io.Source
+import scala.util.Using
+
 /** A Consul release the agent client is checked against, with what that release
   * does differently. Every field below was observed against the real agent in
   * `ConsulAgentIntegrationSuite`, not taken from documentation.
@@ -70,7 +73,8 @@ object ConsulVersions:
 
   val current: ConsulVersion = ConsulVersion(
     label = "consul 1.21",
-    image = "hashicorp/consul:1.21.5",
+    // Read from the file that scripts/native-image-metadata reads too, so the two can't drift apart.
+    image = Using.resource(Source.fromResource("consul.image"))(_.mkString.trim),
     platform = None,
     aclConfig =
       s"""{"acl":{"enabled":true,"default_policy":"deny","tokens":{"initial_management":"$managementToken"}}}""",
