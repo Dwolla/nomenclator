@@ -59,6 +59,8 @@ class ImageSmokeSuite extends CatsEffectSuite:
   // The debug exporter prints each span as a block with a `Name           : <span name>` line.
   private val reconcileSpan = """(?m)^\s*Name\s*: reconcile\s*$""".r
 
+  private val otlpGrpcPort = 4317
+
   private def image: String = sys.env("NOMENCLATOR_IMAGE")
 
   private def assumeImage(): Unit =
@@ -90,7 +92,7 @@ class ImageSmokeSuite extends CatsEffectSuite:
       "AWS_ENDPOINT_URL_ECS" -> aws.renderString,
       "CONSUL_HTTP_ADDR" -> loopback(consulPort),
       "OTEL_EXPORTER_OTLP_ENDPOINT" ->
-        s"http://${loopback(collector.mappedPort(4317))}",
+        s"http://${loopback(collector.mappedPort(otlpGrpcPort))}",
       "OTEL_BSP_SCHEDULE_DELAY" -> "500",
       "OTEL_METRIC_EXPORT_INTERVAL" -> "1000"
     )
@@ -126,10 +128,10 @@ class ImageSmokeSuite extends CatsEffectSuite:
     * Consul again. It is chosen below the ephemeral port ranges (macOS's from
     * 49152, Docker Desktop's VM's from 55000, Linux's default from 32768), so
     * no outgoing connection can take it before Docker binds it. Each port is
-    * probed as Docker binds it: on every address, and without SO_REUSEADDR,
-    * which lets a probe succeed beside a socket that Docker's bind would
-    * collide with. A new ServerSocket's SO_REUSEADDR is up to the platform, and
-    * on macOS it is on.
+    * probed on every address and without SO_REUSEADDR, a stricter test than
+    * Docker's loopback bind: SO_REUSEADDR would let a probe succeed beside a
+    * socket that Docker's bind collides with. A new ServerSocket's SO_REUSEADDR
+    * is up to the platform, and on macOS it is on.
     */
   private val unusedConsulPort: IO[Int] =
     def unused(port: Int): Boolean =
@@ -158,10 +160,10 @@ class ImageSmokeSuite extends CatsEffectSuite:
         None
       )
       _ <- ConsulContainer.awaitReady(consul).toResource
-      collector <- started(
+      collector <- LoopbackPorts.started(otlpGrpcPort, None)(
         GenericContainer(
           dockerImage = collectorImage,
-          exposedPorts = Seq(4317),
+          exposedPorts = Seq(otlpGrpcPort),
           command = Seq("--config", "/etc/otelcol/config.yaml"),
           classpathResourceMapping = Seq(
             FileSystemBind(

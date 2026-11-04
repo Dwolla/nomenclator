@@ -13,7 +13,10 @@ import scala.concurrent.duration.*
   * chosen one.
   */
 object ConsulContainer:
-  private val httpPort = 8500
+
+  /** The port of the agent's HTTP API inside its container.
+    */
+  val httpPort = 8500
   private val secondsToWaitForAgent = 120
 
   /** Starts an agent of `version`, with ACLs turned on by `aclConfig` if given,
@@ -23,14 +26,15 @@ object ConsulContainer:
     container(version, aclConfig, hostPort = None).map(baseUri)
 
   /** Starts an agent of `version`, with ACLs turned on by `aclConfig` if given.
-    * Its HTTP API is published on `hostPort` if given, and on a random host
-    * port otherwise. Docker picks a random port afresh each time a container
-    * starts, so an agent that a test stops and starts again needs a chosen one
-    * to stay where its clients look for it.
+    * Its HTTP API is published on the loopback address (see [[LoopbackPorts]]),
+    * on `hostPort` if given, and on a random host port otherwise. Docker picks
+    * a random port afresh each time a container starts, so an agent that a test
+    * stops and starts again needs a chosen one to stay where its clients look
+    * for it.
     */
   def container
     (version: ConsulVersion, aclConfig: Option[String], hostPort: Option[Int]): Resource[IO, GenericContainer] =
-    Resource.make(IO.blocking:
+    LoopbackPorts.started(httpPort, hostPort):
       val c = GenericContainer(
         dockerImage = version.image,
         exposedPorts = Seq(httpPort),
@@ -49,10 +53,7 @@ object ConsulContainer:
             cmd.withPlatform(p)
             ()
           ()
-      hostPort.foreach: port =>
-        c.configure(_.setPortBindings(java.util.List.of(s"$port:$httpPort")))
-      c.start()
-      c)(c => IO.blocking(c.stop()))
+      c
 
   /** The base URI of the HTTP API of an agent that [[container]] started.
     */
