@@ -7,15 +7,13 @@ import com.amazonaws.ecs.*
 import com.dwolla.nomenclator.consul.algebra.InMemoryConsulAgent
 import com.dwolla.nomenclator.consul.http4s.Http4sConsulAgent
 import com.dwolla.nomenclator.consul.model.*
-import com.dwolla.nomenclator.consul.model.AgentState
 import com.dwolla.nomenclator.ecs.algebra.InMemoryEcsAgent
 import com.dwolla.nomenclator.ecs.model.*
+// Explicit, so it wins over the Protocol that org.http4s.* also brings in.
 import com.dwolla.nomenclator.ecs.model.Protocol
 import com.dwolla.nomenclator.ecs.smithy4s.CachedTaskDefinitions
 import com.dwolla.nomenclator.reconcile.*
 import com.dwolla.nomenclator.registration.*
-import com.dwolla.nomenclator.registration.{HostIdentity, Registration}
-import com.dwolla.nomenclator.telemetry.AlgebraAspects.given
 import io.opentelemetry.api.common.Attributes
 import io.opentelemetry.api.trace.StatusCode
 import io.opentelemetry.sdk.trace.data.SpanData
@@ -265,5 +263,41 @@ class InstrumentationSuite extends CatsEffectSuite:
             byName("ConsulAgent.register").exists(_.contains("foo-service")),
             byName("ConsulAgent.register")
           )
+        end for
+
+  test("no algebra span records what the call returned"):
+    // otel4s-tagless's FunctionCallAttributes.ReturnValueKey, which is private
+    // to the library.
+    val returnValueKey = "com.dwolla.code.function.return_value"
+    val id = ServiceId(fooId)
+    val registration = Registration(
+      id,
+      ServiceName("foo-service"),
+      Nil,
+      ServiceAddress("10.0.0.1"),
+      ok(HostPort.from(32768)),
+      None
+    )
+    OtelJavaTestkit
+      .inMemory[IO]()
+      .use: testkit =>
+        given TracerProvider[IO] = testkit.tracerProvider
+        given MeterProvider[IO] = testkit.meterProvider
+        for
+          intro <- InMemoryEcsAgent(List(fooTask))
+            .flatMap(Instrumentation.instrumentAlgebra(_))
+          consul <- InMemoryConsulAgent(AgentState(Nil, Nil))
+            .flatMap(Instrumentation.instrumentAlgebra(_))
+          _ <- intro.metadata >> intro.tasks
+          _ <- consul.advertisedAddress >> consul.state
+          _ <- consul.register(registration) >> consul.deregister(id)
+          spans <- testkit.finishedSpans
+        yield
+          assertEquals(spans.size, 6, spans.map(_.getName))
+          val recording = spans.filter(
+            _.getAttributes.asMap.asScala.keySet
+              .exists(_.getKey == returnValueKey)
+          )
+          assertEquals(recording.map(_.getName), Nil)
         end for
 end InstrumentationSuite

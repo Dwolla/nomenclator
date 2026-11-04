@@ -942,6 +942,22 @@
       ]
     },
     {
+      "type": "com.dwolla.nomenclator.consul.algebra.ConsulAgent$",
+      "fields": [
+        {
+          "name": "derived$AnyValueAspect$lzy1"
+        }
+      ]
+    },
+    {
+      "type": "com.dwolla.nomenclator.ecs.algebra.EcsAgentIntrospection$",
+      "fields": [
+        {
+          "name": "derived$AnyValueAspect$lzy1"
+        }
+      ]
+    },
+    {
       "type": "com.dwolla.nomenclator.ecs.http4s.ContainerCredentials$",
       "fields": [
         {
@@ -950,16 +966,22 @@
       ]
     },
     {
-      "type": "com.dwolla.nomenclator.telemetry.AlgebraAspects$",
+      "type": "com.dwolla.nomenclator.telemetry.TracingValues$",
       "fields": [
         {
-          "name": "consulAgent$lzy1"
+          "name": "given_ToAnyValue_AgentState$lzy1"
         },
         {
-          "name": "ecsAgentIntrospection$lzy1"
+          "name": "given_ToAnyValue_EcsTask$lzy1"
+        },
+        {
+          "name": "given_ToAnyValue_InstanceMetadata$lzy1"
         },
         {
           "name": "given_ToAnyValue_Registration$lzy1"
+        },
+        {
+          "name": "given_ToAnyValue_ServiceAddress$lzy1"
         },
         {
           "name": "given_ToAnyValue_ServiceId$lzy1"

@@ -139,6 +139,9 @@ lazy val app = project
     buildInfoKeys := Seq[BuildInfoKey](version),
     buildInfoPackage := "com.dwolla.nomenclator",
     smithy4sAwsSpecs ++= Seq(AWS.ecs),
+    // The algebras derive their tracing aspects, and cats-tagless's Derive is experimental. Only app derives aspects;
+    // marking just the derived givens @experimental would make every site that summons them experimental too.
+    scalacOptions += "-experimental",
     libraryDependencies ++= Seq(
       "com.disneystreaming.smithy4s" %% "smithy4s-aws-http4s" % smithy4sVersion,
       "org.http4s" %% "http4s-ember-client" % http4sVersion,
@@ -222,6 +225,8 @@ lazy val integration = project
   .dependsOn(app % "test->test")
   .settings(
     name := "nomenclator-integration",
+    // -experimental marks every definition in app experimental, and these tests use them.
+    scalacOptions += "-experimental",
     libraryDependencies ++= integrationTestDependencies
   )
 

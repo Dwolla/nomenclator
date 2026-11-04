@@ -1,4 +1,4 @@
-package com.dwolla.nomenclator.consul.http4s
+package com.dwolla.nomenclator.consul.circe
 
 import com.dwolla.nomenclator.consul.model.*
 import com.dwolla.nomenclator.ecs.model.*

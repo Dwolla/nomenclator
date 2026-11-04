@@ -19,7 +19,6 @@ import com.dwolla.nomenclator.registration.HostName
 import com.dwolla.nomenclator.registration.settings.GoDuration
 import com.dwolla.nomenclator.startup.*
 import com.dwolla.nomenclator.telemetry.*
-import com.dwolla.nomenclator.telemetry.AlgebraAspects.given
 import com.dwolla.tracing.DwollaEnvironment
 import org.http4s.Uri
 import org.http4s.client.Client

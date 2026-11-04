@@ -3,6 +3,7 @@ package com.dwolla.nomenclator.consul.http4s
 import cats.effect.*
 import cats.syntax.all.*
 import com.dwolla.nomenclator.consul.algebra.{ConsulAgent, ConsulAgentError}
+import com.dwolla.nomenclator.consul.circe.ConsulCodecs
 import com.dwolla.nomenclator.consul.model.*
 import com.dwolla.nomenclator.http.RedactedJson
 import com.dwolla.nomenclator.registration.Registration
