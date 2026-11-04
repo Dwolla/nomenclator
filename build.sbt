@@ -1,3 +1,7 @@
+import com.typesafe.sbt.packager.Keys.validatePackageValidators
+import com.typesafe.sbt.packager.docker.{Cmd, DockerPermissionStrategy}
+import com.typesafe.sbt.packager.validation.*
+
 val catsEffectVersion = "3.7.1"
 val fs2Version = "3.14.0"
 val munitVersion = "1.3.6"
@@ -45,7 +49,7 @@ ThisBuild / githubWorkflowIncludeClean := false
 
 // The checks a pull request must pass: ci.yml's test job and image.yml's build jobs.
 val imageChecks =
-  Seq("Assemble jar", "Image (linux/amd64)", "Image (linux/arm64)")
+  Seq("Image (linux/amd64)", "Image (linux/arm64)")
 ThisBuild / mergifyStewardConfig := Some(
   MergifyStewardConfig()
     .withName("automatic merge for Scala Steward patch updates")
@@ -66,6 +70,23 @@ ThisBuild / mergifyPrRules += MergifyPrRule(
   List(MergifyAction.Merge(method = Some("squash")))
 )
 ThisBuild / mergifyLabelPaths := Map.empty
+
+val toolchainImage = taskKey[String](
+  "Builds docker/toolchain, the native-image toolchain, and returns its tag"
+)
+
+val buildToolchainImage = Def.task {
+  val tag = "nomenclator-toolchain:local"
+  val directory = (ThisBuild / baseDirectory).value / "docker" / "toolchain"
+  // buildx writes its progress to stderr, so both streams log at info; a failure shows as the exit code.
+  val log = streams.value.log
+  val exit = scala.sys.process.Process(
+    Seq("docker", "buildx", "build", "--load", "--tag", tag, "."),
+    directory
+  ) ! scala.sys.process.ProcessLogger(log.info(_), log.info(_))
+  if (exit != 0) sys.error(s"docker buildx build of $tag exited with $exit")
+  tag
+}
 
 val testDependencies = Seq(
   "org.scalameta" %% "munit" % munitVersion,
@@ -93,6 +114,9 @@ lazy val core = project
   .enablePlugins(NoPublishPlugin)
   .settings(
     name := "nomenclator-core",
+    // native-packager takes dependency jars from packagedArtifacts, which NoPublishPlugin empties; without this the
+    // binary is built without nomenclator-core and fails at startup with NoClassDefFoundError.
+    Compile / packageBin / publishArtifact := true,
     libraryDependencies ++= Seq(
       "org.typelevel" %% "cats-effect" % catsEffectVersion,
       "co.fs2" %% "fs2-core" % fs2Version,
@@ -102,7 +126,13 @@ lazy val core = project
 
 lazy val app = project
   .in(file("app"))
-  .enablePlugins(Smithy4sCodegenPlugin, BuildInfoPlugin, NoPublishPlugin)
+  .enablePlugins(
+    Smithy4sCodegenPlugin,
+    BuildInfoPlugin,
+    NoPublishPlugin,
+    GraalVMNativeImagePlugin,
+    DockerPlugin
+  )
   .dependsOn(core % "compile->compile;test->test")
   .settings(
     name := "nomenclator-app",
@@ -139,20 +169,50 @@ lazy val app = project
     ),
     // A forked JVM gets its own system properties, logging, and signals.
     run / fork := true,
-    assembly / assemblyJarName := "nomenclator.jar",
-    assembly / mainClass := Some("com.dwolla.nomenclator.Main"),
-    assembly / assemblyMergeStrategy := {
-      case "module-info.class"                                      => MergeStrategy.discard
-      case PathList("META-INF", "versions", _, "module-info.class") =>
-        MergeStrategy.discard
-      // Codegen-time manifests that clash between smithy4s jars; nothing reads
-      // them at runtime.
-      case PathList("META-INF", "smithy", _*) => MergeStrategy.discard
-      // OSGi metadata that more than one dependency ships; a plain jar on the
-      // classpath never reads it.
-      case PathList("META-INF", "versions", _, "OSGI-INF", "MANIFEST.MF") =>
-        MergeStrategy.discard
-      case x => (assembly / assemblyMergeStrategy).value(x)
+    toolchainImage := buildToolchainImage.value,
+    GraalVMNativeImage / containerBuildImage := Some(toolchainImage.value),
+    // native-packager names the binary with -H:Name, which must match native-image.properties' -o. Because it
+    // hardcodes -H:Name, native-image warns that the option is experimental (three lines per build).
+    GraalVMNativeImage / name := "nomenclator",
+    dockerBaseImage := RuntimeBaseImage
+      .read(
+        (ThisBuild / baseDirectory).value / "docker" / "runtime" / "Dockerfile"
+      )
+      .fold(sys.error, identity),
+    // Root owns /app and everything in it, so the runtime user can't rewrite or replace its own binary. The distroless
+    // base has no shell, so the MultiStage and Run strategies' RUN chmod fails. None copies the stage without --chown,
+    // and what COPY takes from the build context belongs to root. Two generated commands change. WORKDIR would create
+    // /app as the base image's user, 65532, so it goes: COPY creates /app instead, and the base's working directory
+    // stays. Staging leaves the binary executable by its owner alone, so COPY sets the mode with --chmod, which needs
+    // BuildKit; docker buildx always uses it.
+    dockerPermissionStrategy := DockerPermissionStrategy.None,
+    dockerCommands := dockerCommands.value.flatMap {
+      case Cmd("WORKDIR", _*)     => Seq.empty
+      case Cmd("COPY", args @ _*) =>
+        Seq(Cmd("COPY", ("--chmod=755" +: args): _*))
+      case command => Seq(command)
+    },
+    // A uid makes the plugin emit `RUN useradd`, and distroless has no shell to run it. The gid is None for the same
+    // reason; the base image's passwd already gives group 65532.
+    Docker / daemonUserUid := None,
+    Docker / daemonUser := "65532",
+    Docker / daemonGroupGid := None,
+    Docker / daemonGroup := "65532",
+    Docker / defaultLinuxInstallLocation := "/app",
+    dockerEntrypoint := Seq("/app/nomenclator"),
+    dockerLabels := Map("org.opencontainers.image.licenses" -> "MIT"),
+    // The image holds the binary and any JDK shared library native-image emitted beside it (libmanagement_ext.so),
+    // which the binary loads from there; the default mappings would ship the jars and launcher script instead.
+    Docker / mappings := {
+      val binary = (GraalVMNativeImage / packageBin).value
+      val sharedLibraries = (binary.getParentFile * "*.so").get()
+      (binary +: sharedLibraries).map(file => file -> s"/app/${file.getName}")
+    },
+    // The default validators also warn that the image exposes no ports (Nomenclator listens on nothing) and check the
+    // Docker version, which is private to the plugin.
+    Docker / validatePackageValidators := {
+      val imageFiles = (Docker / mappings).value
+      Seq(nonEmptyMappings(imageFiles), filesExist(imageFiles))
     }
   )
 

@@ -43,6 +43,18 @@ else
 fi
 export NOMENCLATOR_IMAGE
 
+# Root owns everything in /app, so the runtime user can't rewrite its own binary. The image has no shell, so its
+# filesystem is listed from outside. GNU tar prints uid/gid as one field; bsdtar (macOS) prints the link count, uid,
+# and gid as three.
+cid="$(docker create "$NOMENCLATOR_IMAGE")" || fail "docker create $NOMENCLATOR_IMAGE"
+trap 'docker rm "$cid" >/dev/null' EXIT
+owners="$(docker export "$cid" | tar --numeric-owner -tvf - app \
+  | awk '{ print (($2 ~ /\//) ? $2 : $3 "/" $4), $NF }')" || fail "listing /app in $NOMENCLATOR_IMAGE"
+printf 'owners of /app in %s (uid/gid path):\n%s\n' "$NOMENCLATOR_IMAGE" "$owners" >> "$log"
+grep -qx '0/0 app/nomenclator' <<< "$owners" || fail "/app/nomenclator is not owned by 0:0"
+if grep -qv '^0/0 ' <<< "$owners"; then fail "something in /app is not owned by 0:0"; fi
+echo "/app is owned by 0:0"
+
 sbt -batch 'integration/testOnly com.dwolla.nomenclator.integration.ImageSmokeSuite' \
   >> "$log" 2>&1 || fail "ImageSmokeSuite"
 

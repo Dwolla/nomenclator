@@ -1,9 +1,15 @@
-# Keeps the Dockerfile's pinned base-image digests and the workflows' pinned action SHAs current.
+# Keeps the Dockerfiles' pinned base-image digests and the workflows' pinned action SHAs current.
 # Scala dependencies stay with Scala Steward.
 version: 2
 updates:
   - package-ecosystem: docker
-    directory: /docker
+    directory: /docker/toolchain
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+  - package-ecosystem: docker
+    directory: /docker/runtime
     schedule:
       interval: weekly
     labels:

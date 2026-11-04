@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Regenerates the GraalVM reachability metadata in
 # app/src/main/resources/META-INF/native-image/com.dwolla/nomenclator/generated/ from one scripted run of the
-# agent, under the native-image tracing agent, inside docker/Dockerfile's `toolchain` stage (the image build's
-# toolchain, so its digest is pinned in one place).
+# agent, under the native-image tracing agent, inside docker/toolchain's image (the image build's toolchain, built by
+# build.sbt's toolchainImage, so its digest is pinned in one place).
 #
 # Run it after a dependency upgrade, or after any change to how Nomenclator calls HTTP, JSON, AWS, or telemetry.
 # The binary only has the reflection, resources, and serialization the run exercised, so the run covers the
@@ -44,7 +44,6 @@ log="target/native-image-metadata.log"
 generated="app/src/main/resources/META-INF/native-image/com.dwolla/nomenclator/generated"
 staging="$root/target/native-image-metadata"
 
-toolchain_image="nomenclator-toolchain:local"
 consul_image="$(<integration/src/test/resources/consul.image)" # shared with ConsulVersions.current
 collector_image="$(<integration/src/test/resources/otel-collector.image)" # shared with ImageSmokeSuite
 suffix="$$"
@@ -117,19 +116,17 @@ agent_logged_beyond() { [[ "$(agent_matches "$1")" -gt "$2" ]]; } # <pattern> <c
 reconcile_spans() { matches "$collector" 'Name  *: reconcile$'; }
 spans_at_least() { [[ "$(reconcile_spans)" -ge "$1" ]]; }
 
-note "building the jar and reading the classpath of the fakes"
-sbt -batch -error app/assembly 'print app/assembly/assemblyOutputPath' \
+note "staging the application's jars, reading the classpath of the fakes, and building the toolchain image"
+# With -error, the only stdout lines are the printed values: the toolchain image's tag, then the fakes' classpath.
+sbt -batch -error app/Universal/stage 'print app/toolchainImage' \
     'export integration/Test/fullClasspath' > "$log.sbt" 2>> "$log" \
   || { cat "$log.sbt" >> "$log"; rm -f "$log.sbt"; fail "sbt"; }
 cat "$log.sbt" >> "$log"
-jar="$(tail -n 2 "$log.sbt" | head -n 1)"
+toolchain_image="$(tail -n 2 "$log.sbt" | head -n 1)"
 fakes_classpath="$(tail -n 1 "$log.sbt")"
 rm -f "$log.sbt"
-[[ -f "$jar" ]] || fail "sbt did not report an existing jar path (got '$jar')"
-
-note "building the toolchain image ($toolchain_image)"
-docker buildx build --load --progress=plain --target toolchain --tag "$toolchain_image" \
-  --file docker/Dockerfile docker >> "$log" 2>&1 || fail "docker buildx build --target toolchain"
+lib="$root/app/target/universal/stage/lib"
+[[ -d "$lib" ]] || fail "sbt did not stage the application's jars in $lib"
 
 consul_port="$(free_port)"
 collector_port="$(free_port "$consul_port")"
@@ -162,7 +159,7 @@ note "starting the agent run"
 # preferIPv4Stack: on Docker Desktop, a JVM's default dual-stack socket gets "connection refused" from the host's
 # loopback ports through host networking, while an IPv4-only socket connects.
 docker run -d --name "$agent" --network host \
-  -v "$jar:/work/nomenclator.jar:ro" -v "$staging:/metadata" \
+  -v "$lib:/work/lib:ro" -v "$staging:/metadata" \
   -e NOMENCLATOR_MODE=apply -e NOMENCLATOR_INTERVAL=2s -e NOMENCLATOR_HOSTNAME=metadata-host \
   -e NOMENCLATOR_ECS_AGENT_URL -e AWS_CONTAINER_CREDENTIALS_FULL_URI -e AWS_ENDPOINT_URL_ECS \
   -e "CONSUL_HTTP_ADDR=127.0.0.1:$consul_port" \
@@ -170,7 +167,7 @@ docker run -d --name "$agent" --network host \
   -e OTEL_BSP_SCHEDULE_DELAY=500 -e OTEL_METRIC_EXPORT_INTERVAL=2000 \
   --entrypoint java "$toolchain_image" \
   -Djava.net.preferIPv4Stack=true \
-  "-agentlib:native-image-agent=config-output-dir=/metadata" -jar /work/nomenclator.jar Local \
+  "-agentlib:native-image-agent=config-output-dir=/metadata" -cp "/work/lib/*" com.dwolla.nomenclator.Main Local \
   >> "$log" 2>&1 || fail "starting the agent run"
 
 wait_until "3 passes reached the collector" 120 spans_at_least 3

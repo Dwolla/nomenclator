@@ -77,7 +77,7 @@ introspection fixtures, and fake AWS endpoints. Nothing touches AWS; the credent
 
 The image holds one mostly static native executable (glibc from the base image), `/app/nomenclator`, with the JDK
 library it loads beside it (`/app/libmanagement_ext.so`), on a distroless `base-debian12:nonroot` base. It is built with
-Mandrel (GraalVM's native-image) from the assembly jar, so it has no JVM and no shell. The native-image flags live in
+Mandrel (GraalVM's native-image) by sbt-native-packager, so it has no JVM and no shell. The native-image flags live in
 `app/src/main/resources/META-INF/native-image/com.dwolla/nomenclator/native-image.properties`, and the reflection
 and resource metadata the executable needs lives next to them in `generated/`.
 
@@ -110,8 +110,12 @@ Deployments pin the index digest (`dwolla/nomenclator@sha256:...`, shown in the 
 
 ### Building and checking it
 
-- `scripts/build-image` assembles the jar and builds `nomenclator:local` for the local architecture (native builds
-  only, no cross-compiling). native-image needs about 7 GB of free memory.
+- `scripts/build-image` runs `sbt app/Docker/stage`, then builds `nomenclator:local` for the local architecture from
+  the stage it wrote, `app/target/docker/stage` (native builds only, no cross-compiling). sbt builds the toolchain
+  image from `docker/toolchain`, runs native-image in it, and writes a Dockerfile with no `RUN` lines on the base image
+  in `docker/runtime/Dockerfile`, which Dependabot keeps current. native-image needs about 7 GB of free memory. The
+  build prints three warnings that `-H:Name` is experimental: sbt-native-packager hardcodes that option, and there is
+  no setting to change it. They are the only warnings the build is expected to print.
 - `scripts/check-image` runs `scripts/build-image`, then `ImageSmokeSuite` against that image (or, if
   `NOMENCLATOR_IMAGE` names an image, skips the build and tests that one) with the hardening
   above, a real Consul agent, and a real OpenTelemetry Collector. It checks that the fixture's services are

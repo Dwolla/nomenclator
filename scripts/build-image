@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds the Nomenclator container image for the local architecture (native builds only: no cross-compiling).
-# Assembles nomenclator.jar, stages it alone in target/image-context/, then runs docker/Dockerfile over that context.
+# sbt-native-packager builds the native-image binary in docker/toolchain's image and stages the image's Dockerfile
+# (app/target/docker/stage), then this runs docker buildx over that stage.
 # Needs Docker with buildx and about 7 GB of free memory for native-image (its builder peaked at 6.75 GB RSS on
 # arm64). Full output goes to target/build-image.log.
 set -euo pipefail
@@ -30,7 +31,8 @@ done
 cd "$(dirname "$0")/.."
 mkdir -p target
 log="target/build-image.log"
-context="target/image-context"
+context="app/target/docker/stage"
+native_lib="app/target/graalvm-native-image/stage/lib"
 
 fail() {
   echo "build-image FAILED: $1; full log: $PWD/$log" >&2
@@ -40,21 +42,16 @@ fail() {
 started=$SECONDS
 : > "$log"
 
-# Ask sbt for the jar's path so the build definition stays the one source of truth for it. With -error, the only
-# stdout line is the printed path.
-sbt -batch -error app/assembly 'print app/assembly/assemblyOutputPath' > "$log.sbt" 2>> "$log" \
-  || { cat "$log.sbt" >> "$log"; fail "sbt app/assembly"; }
-cat "$log.sbt" >> "$log"
-jar="$(tail -n 1 "$log.sbt")"
-rm -f "$log.sbt"
-[[ -f "$jar" ]] || fail "sbt did not report an existing jar path (got '$jar')"
+sbt -batch app/Docker/stage >> "$log" 2>&1 || fail "sbt app/Docker/stage"
 
-rm -rf "$context"
-mkdir -p "$context"
-cp "$jar" "$context/nomenclator.jar"
+# native-packager takes the dependency jars from packagedArtifacts, which NoPublishPlugin empties unless a project
+# turns packageBin's publishArtifact back on (see core in build.sbt). A binary built without nomenclator-core still
+# builds, then dies at startup with NoClassDefFoundError, so check the jar made it in.
+compgen -G "$native_lib/*nomenclator-core*.jar" > /dev/null \
+  || fail "$native_lib holds no nomenclator-core jar, so the binary would lack its classes (is Compile / packageBin / publishArtifact true on core?)"
 
 docker buildx build --load --progress=plain --tag "$tag" \
-  --file docker/Dockerfile "$context" >> "$log" 2>&1 \
+  --file "$context/Dockerfile" "$context" >> "$log" 2>&1 \
   || fail "docker buildx build"
 
 # Read the binary's size from the finished image, since a cached build leaves no native-image report in the log.

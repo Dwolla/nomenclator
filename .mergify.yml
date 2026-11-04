@@ -11,7 +11,6 @@ pull_request_rules:
   - author=dwolla-oss-scala-steward[bot]
   - body~=labels:.*early-semver-patch
   - status-success=Test (ubuntu-24.04, 3, temurin@25)
-  - status-success=Assemble jar
   - status-success=Image (linux/amd64)
   - status-success=Image (linux/arm64)
   actions:
@@ -22,7 +21,6 @@ pull_request_rules:
   - author~=^dependabot(|-preview)\[bot\]$
   - dependabot-update-type!=version-update:semver-major
   - status-success=Test (ubuntu-24.04, 3, temurin@25)
-  - status-success=Assemble jar
   - status-success=Image (linux/amd64)
   - status-success=Image (linux/arm64)
   actions:

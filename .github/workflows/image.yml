@@ -2,7 +2,9 @@
 # production's hardening, and, for a v<version> tag only, publishes the multi-arch index
 # docker.io/dwolla/nomenclator:<version>.
 # Pull requests and branch pushes build and test both architectures and push nothing.
-# .mergify.yml requires the check names of the jar and image jobs below; keep them in step.
+# Each architecture's job runs sbt-native-packager (sbt app/Docker/stage), which builds the binary in the toolchain
+# image and stages the image's Dockerfile, then builds the image from that stage.
+# .mergify.yml requires the check names of the image jobs below; keep them in step.
 name: Image
 
 on:
@@ -27,39 +29,8 @@ env:
   IMAGE: docker.io/dwolla/nomenclator
 
 jobs:
-  jar:
-    name: Assemble jar
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0 # sbt-typelevel derives the version from git tags
-      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
-        with:
-          distribution: temurin
-          java-version: '25'
-          cache: sbt
-      - uses: sbt/setup-sbt@b113b960ba361e87e08ce02a390d51871b7ee459 # v1.5.13
-      # Finds the jar as scripts/build-image does (the build definition owns its path) and stages it flat, so the
-      # artifact holds exactly nomenclator.jar: a wildcard upload path would keep the scala-<version>/ directory.
-      - name: Assemble and stage the jar
-        # An explicit bash shell runs with pipefail, so an sbt failure isn't hidden behind tail's success.
-        shell: bash
-        run: |
-          jar="$(sbt -batch -error app/assembly 'print app/assembly/assemblyOutputPath' | tail -n 1)"
-          [[ -f "$jar" ]] || { echo "::error::sbt did not report an existing jar path (got '$jar')"; exit 1; }
-          mkdir -p target/image-context
-          cp "$jar" target/image-context/nomenclator.jar
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: nomenclator-jar
-          path: target/image-context/nomenclator.jar
-          if-no-files-found: error
-
   image:
     name: Image (${{ matrix.platform }})
-    needs: jar
     strategy:
       fail-fast: false
       matrix:
@@ -81,17 +52,15 @@ jobs:
           java-version: '25'
           cache: sbt
       - uses: sbt/setup-sbt@b113b960ba361e87e08ce02a390d51871b7ee459 # v1.5.13
-      # The same layout scripts/build-image stages: the jar alone, as nomenclator.jar.
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: nomenclator-jar
-          path: target/image-context
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      # Stages what scripts/build-image does: the binary and the Dockerfile that packages it on distroless.
+      - name: Build the binary and stage the image
+        run: sbt -batch app/Docker/stage
       - name: Build the image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: target/image-context
-          file: docker/Dockerfile
+          context: app/target/docker/stage
+          file: app/target/docker/stage/Dockerfile
           load: true
           tags: nomenclator:ci
       - name: Smoke-test the image
@@ -116,8 +85,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: target/image-context
-          file: docker/Dockerfile
+          context: app/target/docker/stage
+          file: app/target/docker/stage/Dockerfile
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
       - name: Export the digest
         if: startsWith(github.ref, 'refs/tags/v')
