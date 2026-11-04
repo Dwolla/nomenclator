@@ -2,8 +2,8 @@ import com.typesafe.sbt.packager.Keys.validatePackageValidators
 import com.typesafe.sbt.packager.docker.{Cmd, DockerPermissionStrategy}
 import com.typesafe.sbt.packager.validation.*
 
+val catsVersion = "2.13.0"
 val catsEffectVersion = "3.7.1"
-val fs2Version = "3.14.0"
 val munitVersion = "1.3.6"
 val munitScalaCheckVersion = "1.3.1"
 val munitCatsEffectVersion = "2.2.1"
@@ -118,8 +118,7 @@ lazy val core = project
     // binary is built without nomenclator-core and fails at startup with NoClassDefFoundError.
     Compile / packageBin / publishArtifact := true,
     libraryDependencies ++= Seq(
-      "org.typelevel" %% "cats-effect" % catsEffectVersion,
-      "co.fs2" %% "fs2-core" % fs2Version,
+      "org.typelevel" %% "cats-core" % catsVersion,
       "com.comcast" %% "ip4s-core" % ip4sVersion
     ) ++ testDependencies
   )
