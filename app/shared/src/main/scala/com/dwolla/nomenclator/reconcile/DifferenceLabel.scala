@@ -2,8 +2,9 @@ package com.dwolla.nomenclator.reconcile
 
 import com.dwolla.nomenclator.plan.Difference
 
-/** How a [[Difference]] is named in logs and metrics. `values` lists every
-  * name, so a metric can report a kind of difference that has none as zero.
+/** How a [[com.dwolla.nomenclator.plan.Difference]] is named in logs and
+  * metrics. `values` lists every name, so a metric can report a kind of
+  * difference that has none as zero.
   */
 enum DifferenceLabel(val value: String):
   case Missing extends DifferenceLabel("missing")

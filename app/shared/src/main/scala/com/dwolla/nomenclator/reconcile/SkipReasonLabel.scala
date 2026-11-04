@@ -2,8 +2,9 @@ package com.dwolla.nomenclator.reconcile
 
 import com.dwolla.nomenclator.registration.SkipReason
 
-/** How a [[SkipReason]] is named in logs and metrics. `values` lists every
-  * name, so a metric can report a reason no container has as zero.
+/** How a [[com.dwolla.nomenclator.registration.SkipReason]] is named in logs
+  * and metrics. `values` lists every name, so a metric can report a reason no
+  * container has as zero.
   */
 enum SkipReasonLabel(val value: String):
   case Ignored extends SkipReasonLabel("ignored")

@@ -98,7 +98,7 @@ object NomenclatorApp:
 
   /** Starts telemetry and connects to the agents and AWS, then gives the
     * reconcile loop, ready to run. Fails if something it needs can't be found
-    * or reached; see [[StartupDiscovery]].
+    * or reached; see [[com.dwolla.nomenclator.startup.StartupDiscovery]].
     */
   def resource[F[_]: Async: LiftIO: Env: LoggerFactory](
                                                          environment: DwollaEnvironment,
