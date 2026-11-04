@@ -1,7 +1,7 @@
 package com.dwolla.nomenclator.telemetry
 
-import cats.effect.Sync
-import cats.effect.std.Env
+import cats.Monad
+import cats.effect.std.{Env, SystemProperties}
 import cats.syntax.all.*
 import com.dwolla.nomenclator.registration.HostName
 
@@ -19,12 +19,13 @@ object HostResourceAttribute:
   /** Sets `otel.resource.attributes` to [[merged]]. Call it before the SDK
     * starts.
     */
-  def install[F[_]: Sync: Env](host: HostName): F[Unit] =
+  def install[F[_]: Monad: Env: SystemProperties](host: HostName): F[Unit] =
     for
       fromEnvironment <- Env[F].get(variable)
-      fromProperty <- Sync[F].delay(sys.props.get(property))
-      _ <- Sync[F].delay(
-        sys.props.update(property, merged(host, fromEnvironment, fromProperty))
+      fromProperty <- SystemProperties[F].get(property)
+      _ <- SystemProperties[F].set(
+        property,
+        merged(host, fromEnvironment, fromProperty)
       )
     yield ()
 

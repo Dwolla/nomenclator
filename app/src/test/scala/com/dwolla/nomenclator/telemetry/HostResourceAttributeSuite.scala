@@ -1,7 +1,7 @@
 package com.dwolla.nomenclator.telemetry
 
 import cats.effect.*
-import cats.effect.std.Env
+import cats.effect.std.{Env, SystemProperties}
 import cats.syntax.all.*
 import com.dwolla.nomenclator.registration.HostName
 import munit.CatsEffectSuite
@@ -55,23 +55,22 @@ class HostResourceAttributeSuite extends CatsEffectSuite:
     )
 
   test("install sets the property from the environment and the property"):
-    val environment = Map("OTEL_RESOURCE_ATTRIBUTES" -> "a=1")
+    val environment = Map("OTEL_RESOURCE_ATTRIBUTES" -> "b=2")
     given Env[IO] = new Env[IO]:
       override def get(name: String): IO[Option[String]] =
         environment.get(name).pure[IO]
       override val entries: IO[scala.collection.immutable.Iterable[(String, String)]] =
         environment.pure[IO].widen
-    val restoringProperty =
-      Resource.make(IO(sys.props.get(property)))(previous =>
-        IO(
-          previous.fold(sys.props.remove(property): Unit)(v => sys.props.update(property, v))
-        )
-      )
-    restoringProperty.surround(
-      IO(sys.props.update(property, "b=2")) >>
-        HostResourceAttribute.install[IO](host) >>
-        IO(sys.props.get(property)).map(
-          assertEquals(_, Some("a=1,b=2,host.name=ip-10-0-0-1"))
-        )
+    for
+      properties <- InMemorySystemProperties.of(Map(property -> "a=1"))
+      _ <-
+        given SystemProperties[IO] = properties
+        HostResourceAttribute.install[IO](host)
+      stored <- properties.get(property)
+    yield assertEquals(
+      stored,
+      HostResourceAttribute
+        .merged(host, "b=2".some, "a=1".some)
+        .some
     )
 end HostResourceAttributeSuite

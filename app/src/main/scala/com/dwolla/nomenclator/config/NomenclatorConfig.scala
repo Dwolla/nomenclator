@@ -80,7 +80,7 @@ object NomenclatorConfig:
   private val LookupTimeoutVariable = "NOMENCLATOR_LOOKUP_TIMEOUT"
   private val FailureLimitVariable = "NOMENCLATOR_FAILURE_LIMIT"
 
-  /** Reads the process's environment variables.
+  /** Reads the process's environment variables. `Async` is demanded by ciris.
     */
   def load[F[_]: Async]: F[NomenclatorConfig] =
     fromEnvironment(ciris.env).load[F]

@@ -26,7 +26,8 @@ object Telemetry:
     * particular, are registered from `runtimeMetrics`. Pending telemetry is
     * flushed when the resource is released.
     *
-    * `LiftIO` is required because the SDK keeps its context in an `IOLocal`;
+    * `Async` is required because dwolla-otel4s-oteljava's `OtelJavaAtDwolla`
+    * demands it; `LiftIO` because the SDK keeps its context in an `IOLocal`;
     * `runtimeMetrics` because only the application holds its `IORuntime`.
     */
   def resource[F[_]: Async: LiftIO: LoggerFactory: Env](

@@ -3,7 +3,7 @@ package com.dwolla.nomenclator
 import cats.Applicative
 import cats.effect.*
 import cats.effect.metrics.CpuStarvationWarningMetrics
-import cats.effect.std.Env
+import cats.effect.std.{Env, SystemProperties}
 import cats.effect.syntax.all.*
 import cats.effect.unsafe.metrics.IORuntimeMetrics as RuntimeMetrics
 import cats.syntax.all.*
@@ -18,6 +18,7 @@ import com.dwolla.nomenclator.registration.HostIdentity
 import com.dwolla.nomenclator.registration.HostName
 import com.dwolla.nomenclator.registration.settings.GoDuration
 import com.dwolla.nomenclator.startup.*
+import com.dwolla.nomenclator.system.LocalHostName
 import com.dwolla.nomenclator.telemetry.*
 import com.dwolla.tracing.DwollaEnvironment
 import org.http4s.Uri
@@ -29,7 +30,6 @@ import org.typelevel.otel4s.metrics.{Meter, MeterProvider}
 import org.typelevel.otel4s.trace.{Tracer, TracerProvider}
 import smithy4s.aws.AwsRegion
 
-import java.net.InetAddress
 import scala.concurrent.duration.*
 
 /** Nomenclator, wired together from its configuration.
@@ -49,10 +49,14 @@ object NomenclatorApp:
 
   /** Runs Nomenclator in the environment the first of `args` names, until it is
     * stopped or gives up. Why it exits is logged.
+    *
+    * This is the one place the strong bounds meet. `Async` is demanded by ciris
+    * (`NomenclatorConfig.load`) and by what `resource` builds.
     */
-  def run[F[_]: Async: LiftIO: Env](args: List[String], runtimeMetrics: RuntimeMetrics): F[ExitCode] =
+  def run[F[_]: Async: LiftIO: Env: SystemProperties](args: List[String], runtimeMetrics: RuntimeMetrics): F[ExitCode] =
     given LoggerFactory[F] = Slf4jFactory.create[F]
     given StructuredLogger[F] = logger[F]
+    given LocalHostName[F] = LocalHostName.live[F]
     (for
       environment <- environment[F](args)
       config <- NomenclatorConfig.load[F]
@@ -64,7 +68,7 @@ object NomenclatorApp:
         .as(ExitCode.Error)
     )
 
-  /** The JSON log every line goes to.
+  /** The JSON log every line goes to. `Sync` is demanded by log4cats-slf4j.
     */
   def logger[F[_]: Sync]: StructuredLogger[F] =
     Slf4jFactory.create[F].getLoggerFromName(name)
@@ -99,12 +103,16 @@ object NomenclatorApp:
   /** Starts telemetry and connects to the agents and AWS, then gives the
     * reconcile loop, ready to run. Fails if something it needs can't be found
     * or reached; see [[com.dwolla.nomenclator.startup.StartupDiscovery]].
+    *
+    * `Async` is demanded by Ember (http4s) and, in `connected`, by
+    * `EcsClient.resource` (smithy4s).
     */
-  def resource[F[_]: Async: LiftIO: Env: LoggerFactory](
-                                                         environment: DwollaEnvironment,
-                                                         config: NomenclatorConfig,
-                                                         runtimeMetrics: RuntimeMetrics
-  ): Resource[F, F[ExitCode]] =
+  def resource[F[_]: Async: LiftIO: Env: SystemProperties: LocalHostName: LoggerFactory]
+    (
+        environment: DwollaEnvironment,
+        config: NomenclatorConfig,
+        runtimeMetrics: RuntimeMetrics
+    ): Resource[F, F[ExitCode]] =
     for
       client <- EmberClientBuilder
         .default[F]
@@ -114,7 +122,7 @@ object NomenclatorApp:
       hostName <- StartupDiscovery
         .hostName[F](
           config.hostName,
-          Sync[F].blocking(InetAddress.getLocalHost.getHostName)
+          LocalHostName[F].hostName
         )
         .toResource
       _ <- HostResourceAttribute.install[F](hostName).toResource
