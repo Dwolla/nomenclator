@@ -4,6 +4,74 @@ Nomenclator keeps a Consul agent's service catalog in step with the containers r
 
 Run `scripts/check` to format-check, compile under fatal warnings, and run every test. It runs `sbt check` and writes the full output to `target/check.log`, printing that path if the check fails.
 
+## How it works
+
+```mermaid
+flowchart LR
+  subgraph host["ECS container instance"]
+    direction LR
+    ecsagent["ECS container agent<br/>introspection API<br/>localhost:51678"]
+    consul["Consul agent<br/>HTTP API :8500"]
+    subgraph nom["Nomenclator (ECS DAEMON task, host network)<br/>no socket, no mounts, non-root, read-only fs"]
+      n["NomenclatorApp<br/>Reconciler"]
+    end
+    subgraph tasks["Service tasks (bridge mode, dynamic host ports)"]
+      t1["app-a :8080 to host :32768"]
+      t2["app-b :8080, :8081 to host :32770, :32771"]
+    end
+  end
+  ecsapi[("Amazon ECS API<br/>DescribeTaskDefinition")]
+  creds[("ECS task-role credentials<br/>169.254.170.2")]
+
+  n -- "Http4sEcsAgentIntrospection<br/>GET /v1/metadata, /v1/tasks (poll)" --> ecsagent
+  n -- "smithy4s EcsClient<br/>SigV4, cached per revision" --> ecsapi
+  n -. "ContainerCredentials" .-> creds
+  n -- "Http4sConsulAgent<br/>GET /v1/agent/services, /checks<br/>PUT register / deregister<br/>X-Consul-Token" --> consul
+  ecsagent -. "runs" .-> tasks
+  consul -. "HTTP/TCP checks" .-> tasks
+```
+
+Nomenclator runs as an ECS **DAEMON** service in **host** network mode, one task per container instance. Host
+networking is what lets it reach the ECS agent's introspection API and the Consul agent on loopback. It needs no
+volume, no Docker socket, and no capabilities.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant L as Reconciler (every interval)
+  participant E as EcsAgentIntrospection
+  participant D as TaskDefinitions (CachedTaskDefinitions, then the ECS API)
+  participant C as ConsulAgent
+  participant G as ChangeLog
+
+  L->>E: tasks
+  E-->>L: tasks on this instance (status, containers, ports)
+  L->>D: definitions for new family:revision pairs
+  D-->>L: environment and docker labels (cached until no task uses them)
+  Note over L: pure: desired = Registrations.desired(host, tasks, definitions, tags)
+  L->>C: state
+  C-->>L: actual services and checks
+  Note over L: pure: plan = Planner.plan(host name, desired, actual)
+  alt Mode.Apply
+    L->>C: deregister (owned and no longer desired, or changed and being replaced)
+    L->>C: register (missing or changed)
+    L->>G: log each write (a failure is retried next pass)
+  else Mode.Shadow
+    L->>G: log the differences, write nothing
+  end
+```
+
+- **Desired, owned, and changed.** Desired is every registration the running tasks call for. Owned means a service on
+  this agent whose ID starts with this host's name, which is how Nomenclator recognizes its own registrations and
+  never touches anything else on the agent. Changed means the registration Nomenclator would send differs from what
+  the agent reports, so unchanged services are never re-registered and a no-op never resets a check's state.
+- **Each pass plans, then acts.** A pass reads the tasks and the agent, computes the desired and actual sets with pure
+  functions, and writes only the difference. One failed write is logged and retried on the next pass; it never stops
+  the others.
+- **Shutdown does not deregister.** On `SIGTERM` Nomenclator stops its loop and exits, leaving every registration in
+  place. Redeploying it must not drop every service on the host, and the next task recognizes the registrations as its
+  own by the host-name prefix and reconciles from there.
+
 ## Configuration
 
 Nomenclator reads environment variables. Durations use Go's syntax (`5s`, `1m30s`, `500ms`).
