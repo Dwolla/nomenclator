@@ -229,34 +229,32 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield (reports, writes, agent, logged)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (reports, writes, agent, logged) =>
-        assertEquals(
-          described(writes),
-          Vector(
-            s"register ${fooId.value}",
-            s"register ${barId.value}",
-            s"register ${fooId.value}"
-          )
+    underFixedSeed(program).map: (reports, writes, agent, logged) =>
+      assertEquals(
+        described(writes),
+        Vector(
+          s"register ${fooId.value}",
+          s"register ${barId.value}",
+          s"register ${fooId.value}"
         )
-        assertEquals(agent.services.map(_.id).toSet, Set(fooId, barId))
-        assertEquals(
-          reports.map(_.outcome.map(_.failures.map(_.id))),
-          List(Right(List(fooId)), Right(Nil), Right(Nil))
-        )
-        assertEquals(
-          warnings(logged).filter(about(fooId)).size,
-          1,
-          logged.toString
-        )
-        assertEquals(
-          infos(logged)
-            .filter(about(fooId))
-            .count(_.message.contains("succeeded after failing")),
-          1,
-          logged.toString
-        )
+      )
+      assertEquals(agent.services.map(_.id).toSet, Set(fooId, barId))
+      assertEquals(
+        reports.map(_.outcome.map(_.failures.map(_.id))),
+        List(Right(List(fooId)), Right(Nil), Right(Nil))
+      )
+      assertEquals(
+        warnings(logged).filter(about(fooId)).size,
+        1,
+        logged.toString
+      )
+      assertEquals(
+        infos(logged)
+          .filter(about(fooId))
+          .count(_.message.contains("succeeded after failing")),
+        1,
+        logged.toString
+      )
 
   test("a skip is logged once across 10 passes"):
     val program = for
@@ -276,21 +274,19 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield (writes, logged)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (writes, logged) =>
-        assertEquals(writes, Vector.empty)
-        assertEquals(
-          warnings(logged).flatMap(_.ctx.get("reason")).toSet,
-          Set("script_check", "invalid_settings"),
-          logged.toString
-        )
-        assertEquals(
-          infos(logged).flatMap(_.ctx.get("reason")),
-          Vector("ignored"),
-          logged.toString
-        )
-        assertEquals(logged.size, 3, logged.toString)
+    underFixedSeed(program).map: (writes, logged) =>
+      assertEquals(writes, Vector.empty)
+      assertEquals(
+        warnings(logged).flatMap(_.ctx.get("reason")).toSet,
+        Set("script_check", "invalid_settings"),
+        logged.toString
+      )
+      assertEquals(
+        infos(logged).flatMap(_.ctx.get("reason")),
+        Vector("ignored"),
+        logged.toString
+      )
+      assertEquals(logged.size, 3, logged.toString)
 
   test(
     "shadow mode writes nothing, and logs each difference when it appears and when it clears"
@@ -314,25 +310,23 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield (reports, writes, logged)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (reports, writes, logged) =>
-        assertEquals(writes, Vector.empty)
-        assertEquals(
-          reports.map(_.outcome.map(_.differences.size)),
-          List.fill(5)(Right(3)) ++ List.fill(5)(Right(0))
-        )
-        assertEquals(
-          infos(logged).count(_.message.contains("appeared")),
-          3,
-          logged.toString
-        )
-        assertEquals(
-          infos(logged).count(_.message.contains("cleared")),
-          3,
-          logged.toString
-        )
-        assertEquals(logged.size, 6, logged.toString)
+    underFixedSeed(program).map: (reports, writes, logged) =>
+      assertEquals(writes, Vector.empty)
+      assertEquals(
+        reports.map(_.outcome.map(_.differences.size)),
+        List.fill(5)(Right(3)) ++ List.fill(5)(Right(0))
+      )
+      assertEquals(
+        infos(logged).count(_.message.contains("appeared")),
+        3,
+        logged.toString
+      )
+      assertEquals(
+        infos(logged).count(_.message.contains("cleared")),
+        3,
+        logged.toString
+      )
+      assertEquals(logged.size, 6, logged.toString)
 
   test(
     "1 minute 59 seconds of failed introspection keeps going, writes nothing, and warns once"
@@ -348,14 +342,12 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield (reports, writes, logged)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (reports, writes, logged) =>
-        assertEquals(reports.size, 24)
-        assert(reports.forall(_.outcome.isLeft), reports.toString)
-        assertEquals(writes, Vector.empty)
-        assertEquals(warnings(logged).size, 1, logged.toString)
-        assertEquals(logged.size, 1, logged.toString)
+    underFixedSeed(program).map: (reports, writes, logged) =>
+      assertEquals(reports.size, 24)
+      assert(reports.forall(_.outcome.isLeft), reports.toString)
+      assertEquals(writes, Vector.empty)
+      assertEquals(warnings(logged).size, 1, logged.toString)
+      assertEquals(logged.size, 1, logged.toString)
 
   test(
     "2 minutes of failed introspection reports every pass, then ends the stream with an error"
@@ -371,15 +363,13 @@ class ReconcilerSuite extends CatsEffectSuite:
       end <- IO.monotonic
     yield (emitted, end - start)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (emitted, elapsed) =>
-        assertEquals(elapsed, 2.minutes)
-        assertEquals(emitted.count(_.isRight), 25)
-        assertEquals(
-          emitted.lastOption,
-          Some(Left(ReconcileFailedTooLong(2.minutes)))
-        )
+    underFixedSeed(program).map: (emitted, elapsed) =>
+      assertEquals(elapsed, 2.minutes)
+      assertEquals(emitted.count(_.isRight), 25)
+      assertEquals(
+        emitted.lastOption,
+        Some(Left(ReconcileFailedTooLong(2.minutes)))
+      )
 
   test("a successful pass restarts the failure clock"):
     // Passes run every 5 s: pass 18 (at 1m30s) succeeds and the rest fail, so
@@ -402,11 +392,9 @@ class ReconcilerSuite extends CatsEffectSuite:
       end <- IO.monotonic
     yield (result, end - start)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (result, elapsed) =>
-        assertEquals(result, Left(ReconcileFailedTooLong(2.minutes)))
-        assertEquals(elapsed, 3.minutes + 30.seconds)
+    underFixedSeed(program).map: (result, elapsed) =>
+      assertEquals(result, Left(ReconcileFailedTooLong(2.minutes)))
+      assertEquals(elapsed, 3.minutes + 30.seconds)
 
   test(
     "a failed definition lookup keeps that task's registrations and leaves other tasks' intact"
@@ -424,23 +412,21 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield (reports, writes, agent, logged)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (reports, writes, agent, logged) =>
-        assertEquals(
-          described(writes),
-          Vector(s"deregister ${orphan.id.value}", s"register ${fooId.value}")
-        )
-        assertEquals(agent.services.map(_.id).toSet, Set(barId, fooId))
-        assertEquals(
-          reports.map(_.outcome.map(_.desired.awaitingDefinitions)),
-          List.fill(3)(Right(Set(barRef)))
-        )
-        assertEquals(warnings(logged).size, 1, logged.toString)
-        assert(
-          logged.forall(m => m.throwOpt.isEmpty && !(m.message + m.ctx).contains("hunter2")),
-          logged.toString
-        )
+    underFixedSeed(program).map: (reports, writes, agent, logged) =>
+      assertEquals(
+        described(writes),
+        Vector(s"deregister ${orphan.id.value}", s"register ${fooId.value}")
+      )
+      assertEquals(agent.services.map(_.id).toSet, Set(barId, fooId))
+      assertEquals(
+        reports.map(_.outcome.map(_.desired.awaitingDefinitions)),
+        List.fill(3)(Right(Set(barRef)))
+      )
+      assertEquals(warnings(logged).size, 1, logged.toString)
+      assert(
+        logged.forall(m => m.throwOpt.isEmpty && !(m.message + m.ctx).contains("hunter2")),
+        logged.toString
+      )
 
   test(
     "an unrecognized AWS error answer is logged with its HTTP status but not its body"
@@ -459,18 +445,16 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield logged
 
-    TestControl
-      .executeEmbed(program)
-      .map: logged =>
-        assertEquals(
-          warnings(logged).flatMap(_.ctx.get("status")),
-          Vector("400"),
-          logged.toString
-        )
-        assert(
-          !logged.exists(m => (m.message + m.ctx).contains("hunter2")),
-          logged.toString
-        )
+    underFixedSeed(program).map: logged =>
+      assertEquals(
+        warnings(logged).flatMap(_.ctx.get("status")),
+        Vector("400"),
+        logged.toString
+      )
+      assert(
+        !logged.exists(m => (m.message + m.ctx).contains("hunter2")),
+        logged.toString
+      )
 
   test(
     "each pass keeps only the cached definitions of the tasks the agent reports"
@@ -486,8 +470,7 @@ class ReconcilerSuite extends CatsEffectSuite:
     yield retained
 
     // The failed read in the second pass forgets nothing.
-    TestControl
-      .executeEmbed(program)
+    underFixedSeed(program)
       .map(assertEquals(_, Vector(Set(fooRef, barRef), Set(fooRef))))
 
   test(
@@ -563,18 +546,16 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield (reports, writes, logged)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (reports, writes, logged) =>
-        assertEquals(
-          described(writes),
-          Vector(s"deregister ${barId.value}", s"register ${fooId.value}")
-        )
-        assertEquals(
-          reports.map(_.outcome.map(_.desired.awaitingDefinitions)),
-          List(Right(Set.empty[TaskDefinitionRef]))
-        )
-        assertEquals(warnings(logged), Vector.empty)
+    underFixedSeed(program).map: (reports, writes, logged) =>
+      assertEquals(
+        described(writes),
+        Vector(s"deregister ${barId.value}", s"register ${fooId.value}")
+      )
+      assertEquals(
+        reports.map(_.outcome.map(_.desired.awaitingDefinitions)),
+        List(Right(Set.empty[TaskDefinitionRef]))
+      )
+      assertEquals(warnings(logged), Vector.empty)
 
   test(
     "apply deregisters before it registers, and logs each change with its kind"
@@ -600,71 +581,69 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield (seeded, reports, writes, agent, logged)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (seeded, reports, writes, agent, logged) =>
-        assertEquals(
-          reports.map(_.outcome.map(_.actual)),
-          List(Right(seeded), Right(agent))
+    underFixedSeed(program).map: (seeded, reports, writes, agent, logged) =>
+      assertEquals(
+        reports.map(_.outcome.map(_.actual)),
+        List(Right(seeded), Right(agent))
+      )
+      assertEquals(
+        described(writes),
+        Vector(
+          s"deregister ${fooId.value}",
+          s"deregister ${orphan.id.value}",
+          s"register ${fooId.value}",
+          s"register ${barId.value}",
+          s"register ${bazId.value}"
         )
-        assertEquals(
-          described(writes),
-          Vector(
-            s"deregister ${fooId.value}",
-            s"deregister ${orphan.id.value}",
-            s"register ${fooId.value}",
-            s"register ${barId.value}",
-            s"register ${bazId.value}"
-          )
-        )
-        assertEquals(
-          reports.headOption.map(kinds),
-          Some(
-            Right(
-              List(
-                s"deregister ${orphan.id.value} ok",
-                s"replace ${fooId.value} ok",
-                s"update ${barId.value} ok",
-                s"register ${bazId.value} ok"
-              )
+      )
+      assertEquals(
+        reports.headOption.map(kinds),
+        Some(
+          Right(
+            List(
+              s"deregister ${orphan.id.value} ok",
+              s"replace ${fooId.value} ok",
+              s"update ${barId.value} ok",
+              s"register ${bazId.value} ok"
             )
           )
         )
-        assertEquals(agent.checks, Nil)
-        assertEquals(
-          infos(logged).map(_.ctx),
-          Vector(
-            Map(
-              "kind" -> "deregister",
-              "service_id" -> orphan.id.value,
-              "service_name" -> "gone",
-              "address" -> address,
-              "port" -> "32767"
-            ),
-            Map(
-              "kind" -> "replace",
-              "service_id" -> fooId.value,
-              "service_name" -> "foo-service",
-              "address" -> address,
-              "port" -> "32768"
-            ),
-            Map(
-              "kind" -> "update",
-              "service_id" -> barId.value,
-              "service_name" -> "bar-worker",
-              "address" -> address,
-              "port" -> "32769"
-            ),
-            Map(
-              "kind" -> "register",
-              "service_id" -> bazId.value,
-              "service_name" -> "baz-api",
-              "address" -> address,
-              "port" -> "32770"
-            )
+      )
+      assertEquals(agent.checks, Nil)
+      assertEquals(
+        infos(logged).map(_.ctx),
+        Vector(
+          Map(
+            "kind" -> "deregister",
+            "service_id" -> orphan.id.value,
+            "service_name" -> "gone",
+            "address" -> address,
+            "port" -> "32767"
+          ),
+          Map(
+            "kind" -> "replace",
+            "service_id" -> fooId.value,
+            "service_name" -> "foo-service",
+            "address" -> address,
+            "port" -> "32768"
+          ),
+          Map(
+            "kind" -> "update",
+            "service_id" -> barId.value,
+            "service_name" -> "bar-worker",
+            "address" -> address,
+            "port" -> "32769"
+          ),
+          Map(
+            "kind" -> "register",
+            "service_id" -> bazId.value,
+            "service_name" -> "baz-api",
+            "address" -> address,
+            "port" -> "32770"
           )
         )
-        assertEquals(warnings(logged), Vector.empty)
+      )
+      assertEquals(warnings(logged), Vector.empty)
 
   test(
     "a failed Consul read writes nothing, warns once, and logs its recovery"
@@ -679,20 +658,18 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield (reports, writes, logged)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (reports, writes, logged) =>
-        assertEquals(
-          reports.map(_.outcome.isRight),
-          List(false, false, false, true)
-        )
-        assertEquals(described(writes), Vector(s"register ${fooId.value}"))
-        assertEquals(warnings(logged).size, 1, logged.toString)
-        assertEquals(
-          infos(logged).count(_.message.contains("recovered")),
-          1,
-          logged.toString
-        )
+    underFixedSeed(program).map: (reports, writes, logged) =>
+      assertEquals(
+        reports.map(_.outcome.isRight),
+        List(false, false, false, true)
+      )
+      assertEquals(described(writes), Vector(s"register ${fooId.value}"))
+      assertEquals(warnings(logged).size, 1, logged.toString)
+      assertEquals(
+        infos(logged).count(_.message.contains("recovered")),
+        1,
+        logged.toString
+      )
 
   test("a desired registration whose ID isn't owned is logged once"):
     val unrecognizable = task("odd", fooRef, "odd~name", 8080, 32768)
@@ -703,16 +680,14 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield (writes, logged)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (writes, logged) =>
-        assertEquals(writes, Vector.empty)
-        assertEquals(
-          warnings(logged).flatMap(_.ctx.get("service_id")),
-          Vector("test-host:odd~name:8080"),
-          logged.toString
-        )
-        assertEquals(logged.size, 1, logged.toString)
+    underFixedSeed(program).map: (writes, logged) =>
+      assertEquals(writes, Vector.empty)
+      assertEquals(
+        warnings(logged).flatMap(_.ctx.get("service_id")),
+        Vector("test-host:odd~name:8080"),
+        logged.toString
+      )
+      assertEquals(logged.size, 1, logged.toString)
 
   test("a requested custom service ID is logged once and not honored"):
     val program = for
@@ -722,15 +697,13 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield (writes, logged)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (writes, logged) =>
-        assertEquals(described(writes), Vector(s"register ${fooId.value}"))
-        assertEquals(
-          warnings(logged).map(_.ctx.get("container")),
-          Vector(Some("web")),
-          logged.toString
-        )
+    underFixedSeed(program).map: (writes, logged) =>
+      assertEquals(described(writes), Vector(s"register ${fooId.value}"))
+      assertEquals(
+        warnings(logged).map(_.ctx.get("container")),
+        Vector(Some("web")),
+        logged.toString
+      )
 
   test(
     "a pass that never finishes times out, the next runs on schedule, and the failure limit still applies"
@@ -748,25 +721,23 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield (emitted, end - start, writes, logged)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (emitted, elapsed, writes, logged) =>
-        // Passes start at 0, 30 s, 1m, and 1m30s, each as soon as the one
-        // before it timed out, and the fourth reaches the limit at 2m.
-        assertEquals(
-          emitted.collect:
-            case Right(r) => (r.duration, r.outcome)
-          ,
-          List.fill(4)((passTimeout, Left(PassTimedOut(passTimeout))))
-        )
-        assertEquals(
-          emitted.lastOption,
-          Some(Left(ReconcileFailedTooLong(2.minutes)))
-        )
-        assertEquals(elapsed, 2.minutes)
-        assertEquals(writes, Vector.empty)
-        assertEquals(warnings(logged).size, 1, logged.toString)
-        assertEquals(logged.size, 1, logged.toString)
+    underFixedSeed(program).map: (emitted, elapsed, writes, logged) =>
+      // Passes start at 0, 30 s, 1m, and 1m30s, each as soon as the one
+      // before it timed out, and the fourth reaches the limit at 2m.
+      assertEquals(
+        emitted.collect:
+          case Right(r) => (r.duration, r.outcome)
+        ,
+        List.fill(4)((passTimeout, Left(PassTimedOut(passTimeout))))
+      )
+      assertEquals(
+        emitted.lastOption,
+        Some(Left(ReconcileFailedTooLong(2.minutes)))
+      )
+      assertEquals(elapsed, 2.minutes)
+      assertEquals(writes, Vector.empty)
+      assertEquals(warnings(logged).size, 1, logged.toString)
+      assertEquals(logged.size, 1, logged.toString)
 
   test(
     "writes made before a pass times out stay done, and the rest are made next pass"
@@ -780,28 +751,26 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield (reports, writes, agent, logged)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (reports, writes, agent, logged) =>
-        assertEquals(
-          reports.map(_.outcome.map(_.plan.register.map(_.id))),
-          List(Left(PassTimedOut(passTimeout)), Right(List(barId)))
+    underFixedSeed(program).map: (reports, writes, agent, logged) =>
+      assertEquals(
+        reports.map(_.outcome.map(_.plan.register.map(_.id))),
+        List(Left(PassTimedOut(passTimeout)), Right(List(barId)))
+      )
+      assertEquals(
+        described(writes),
+        Vector(
+          s"register ${fooId.value}",
+          s"register ${barId.value}",
+          s"register ${barId.value}"
         )
-        assertEquals(
-          described(writes),
-          Vector(
-            s"register ${fooId.value}",
-            s"register ${barId.value}",
-            s"register ${barId.value}"
-          )
-        )
-        assertEquals(agent.services.map(_.id).toSet, Set(fooId, barId))
-        assertEquals(warnings(logged).size, 1, logged.toString)
-        assertEquals(
-          infos(logged).count(_.message.contains("in time again")),
-          1,
-          logged.toString
-        )
+      )
+      assertEquals(agent.services.map(_.id).toSet, Set(fooId, barId))
+      assertEquals(warnings(logged).size, 1, logged.toString)
+      assertEquals(
+        infos(logged).count(_.message.contains("in time again")),
+        1,
+        logged.toString
+      )
 
   private val awaitingFailure = new RuntimeException("throttled")
 
@@ -824,18 +793,16 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield (reports, writes, agent, logged)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (reports, writes, agent, logged) =>
-        assert(reports.sizeIs > 30, reports.size.toString)
-        assert(reports.forall(_.outcome.isRight), reports.toString)
-        assert(reports.forall(_.duration == lookupTimeout), reports.toString)
-        assertEquals(
-          described(writes),
-          Vector(s"deregister ${orphan.id.value}", s"register ${fooId.value}")
-        )
-        assertEquals(agent.services.map(_.id).toSet, Set(barId, fooId))
-        assertEquals(warnings(logged).size, 1, logged.toString)
+    underFixedSeed(program).map: (reports, writes, agent, logged) =>
+      assert(reports.sizeIs > 30, reports.size.toString)
+      assert(reports.forall(_.outcome.isRight), reports.toString)
+      assert(reports.forall(_.duration == lookupTimeout), reports.toString)
+      assertEquals(
+        described(writes),
+        Vector(s"deregister ${orphan.id.value}", s"register ${fooId.value}")
+      )
+      assertEquals(agent.services.map(_.id).toSet, Set(barId, fooId))
+      assertEquals(warnings(logged).size, 1, logged.toString)
 
   test("shadow mode doesn't report an awaiting task's services as extra"):
     val program = for
@@ -848,18 +815,16 @@ class ReconcilerSuite extends CatsEffectSuite:
       reports <- passes(w, 1, Mode.Shadow)()
     yield reports
 
-    TestControl
-      .executeEmbed(program)
-      .map: reports =>
-        assertEquals(
-          reports.map(
-            _.outcome.map(_.differences.map:
-              case Difference.Missing(r)         => s"missing ${r.id.value}"
-              case Difference.Extra(s)           => s"extra ${s.id.value}"
-              case Difference.Different(r, _, _) => s"different ${r.id.value}")
-          ),
-          List(Right(List(s"missing ${fooId.value}")))
-        )
+    underFixedSeed(program).map: reports =>
+      assertEquals(
+        reports.map(
+          _.outcome.map(_.differences.map:
+            case Difference.Missing(r)         => s"missing ${r.id.value}"
+            case Difference.Extra(s)           => s"extra ${s.id.value}"
+            case Difference.Different(r, _, _) => s"different ${r.id.value}")
+        ),
+        List(Right(List(s"missing ${fooId.value}")))
+      )
 
   test(
     "a replacement whose register fails is logged as a deregistration, with a warning"
@@ -878,19 +843,17 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield logged
 
-    TestControl
-      .executeEmbed(program)
-      .map: logged =>
-        assertEquals(
-          infos(logged).map(_.ctx.get("kind")),
-          Vector(Some("deregister")),
-          logged.toString
-        )
-        assertEquals(
-          warnings(logged).filter(about(fooId)).size,
-          1,
-          logged.toString
-        )
+    underFixedSeed(program).map: logged =>
+      assertEquals(
+        infos(logged).map(_.ctx.get("kind")),
+        Vector(Some("deregister")),
+        logged.toString
+      )
+      assertEquals(
+        warnings(logged).filter(about(fooId)).size,
+        1,
+        logged.toString
+      )
 
   test(
     "a replacement whose register fails is reported as a deregistration and a failed registration"
@@ -908,20 +871,18 @@ class ReconcilerSuite extends CatsEffectSuite:
       reports <- passes(w, 1)()
     yield reports
 
-    TestControl
-      .executeEmbed(program)
-      .map: reports =>
-        assertEquals(
-          reports.map(kinds),
-          List(
-            Right(
-              List(
-                s"deregister ${fooId.value} ok",
-                s"register ${fooId.value} failed"
-              )
+    underFixedSeed(program).map: reports =>
+      assertEquals(
+        reports.map(kinds),
+        List(
+          Right(
+            List(
+              s"deregister ${fooId.value} ok",
+              s"register ${fooId.value} failed"
             )
           )
         )
+      )
 
   test(
     "a replacement whose deregister fails is logged, reported, and retried as an update"
@@ -941,34 +902,32 @@ class ReconcilerSuite extends CatsEffectSuite:
       logged <- w.logger.logged
     yield (reports, writes, logged)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (reports, writes, logged) =>
-        assertEquals(
-          described(writes),
-          Vector(s"deregister ${fooId.value}", s"register ${fooId.value}")
-        )
-        assertEquals(
-          reports.map(kinds),
-          List(
-            Right(
-              List(
-                s"deregister ${fooId.value} failed",
-                s"update ${fooId.value} ok"
-              )
+    underFixedSeed(program).map: (reports, writes, logged) =>
+      assertEquals(
+        described(writes),
+        Vector(s"deregister ${fooId.value}", s"register ${fooId.value}")
+      )
+      assertEquals(
+        reports.map(kinds),
+        List(
+          Right(
+            List(
+              s"deregister ${fooId.value} failed",
+              s"update ${fooId.value} ok"
             )
           )
         )
-        assertEquals(
-          infos(logged).map(_.ctx.get("kind")),
-          Vector(Some("update")),
-          logged.toString
-        )
-        assertEquals(
-          warnings(logged).filter(about(fooId)).size,
-          1,
-          logged.toString
-        )
+      )
+      assertEquals(
+        infos(logged).map(_.ctx.get("kind")),
+        Vector(Some("update")),
+        logged.toString
+      )
+      assertEquals(
+        warnings(logged).filter(about(fooId)).size,
+        1,
+        logged.toString
+      )
 
   test("a failed deregistration doesn't stop the others"):
     val otherOrphan =
@@ -981,21 +940,19 @@ class ReconcilerSuite extends CatsEffectSuite:
       agent <- w.consul.current
     yield (reports, writes, agent)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (reports, writes, agent) =>
-        assertEquals(
-          described(writes),
-          Vector(
-            s"deregister ${orphan.id.value}",
-            s"deregister ${otherOrphan.id.value}"
-          )
+    underFixedSeed(program).map: (reports, writes, agent) =>
+      assertEquals(
+        described(writes),
+        Vector(
+          s"deregister ${orphan.id.value}",
+          s"deregister ${otherOrphan.id.value}"
         )
-        assertEquals(agent.services, List(orphan))
-        assertEquals(
-          reports.map(_.outcome.map(_.failures.map(_.id))),
-          List(Right(List(orphan.id)))
-        )
+      )
+      assertEquals(agent.services, List(orphan))
+      assertEquals(
+        reports.map(_.outcome.map(_.failures.map(_.id))),
+        List(Right(List(orphan.id)))
+      )
 
   /** Runs one apply pass with `barRef`'s definition failing, and returns the
     * IDs left on the agent.
@@ -1011,7 +968,7 @@ class ReconcilerSuite extends CatsEffectSuite:
       _ <- passes(w, 1)()
       agent <- w.consul.current
     yield agent.services.map(_.id).toSet
-    TestControl.executeEmbed(program)
+    underFixedSeed(program)
 
   test(
     "an awaiting task's Docker name protects only IDs with exactly that name"
@@ -1075,17 +1032,15 @@ class ReconcilerSuite extends CatsEffectSuite:
       agent <- w.consul.current
     yield (reports, writes, agent)
 
-    TestControl
-      .executeEmbed(program)
-      .map: (reports, writes, agent) =>
-        assertEquals(
-          reports.map(_.duration),
-          List(DefinitionLookups.deadline(lookupTimeout))
-        )
-        assertEquals(
-          reports.map(_.outcome.map(_.desired.awaitingDefinitions)),
-          List(Right(refs.tail.toSet))
-        )
-        assertEquals(described(writes), Vector(s"register ${ids.head.value}"))
-        assertEquals(agent.services.map(_.id).toSet, ids.toSet)
+    underFixedSeed(program).map: (reports, writes, agent) =>
+      assertEquals(
+        reports.map(_.duration),
+        List(DefinitionLookups.deadline(lookupTimeout))
+      )
+      assertEquals(
+        reports.map(_.outcome.map(_.desired.awaitingDefinitions)),
+        List(Right(refs.tail.toSet))
+      )
+      assertEquals(described(writes), Vector(s"register ${ids.head.value}"))
+      assertEquals(agent.services.map(_.id).toSet, ids.toSet)
 end ReconcilerSuite
