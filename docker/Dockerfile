@@ -3,8 +3,10 @@
 # jar's META-INF/native-image/com.dwolla/nomenclator/native-image.properties, so this file adds none.
 # Native builds only: build each architecture's image on that architecture.
 
-FROM quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:25.0.5.0-Final-java25@sha256:4af907423955d43beb791ee247516e13128fc880b4e58f6a66171a90f850e1fb AS builder
+FROM quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:25.0.5.0-Final-java25@sha256:4af907423955d43beb791ee247516e13128fc880b4e58f6a66171a90f850e1fb AS toolchain
 
+# The native-image toolchain, apart from the jar so that scripts/native-image-metadata can run the tracing agent in
+# exactly this toolchain (docker buildx build --target toolchain) without building the binary first.
 # --static-nolibc links libz.a statically. The builder image lacks it and UBI ships no zlib-static package, so
 # build zlib from source.
 USER root
@@ -20,6 +22,8 @@ RUN curl -fsSLo /tmp/zlib.tgz https://github.com/madler/zlib/releases/download/v
  && rm -rf /tmp/zlib*
 
 USER 1001
+
+FROM toolchain AS builder
 WORKDIR /build
 COPY --chown=1001 nomenclator.jar .
 RUN native-image -jar nomenclator.jar \
