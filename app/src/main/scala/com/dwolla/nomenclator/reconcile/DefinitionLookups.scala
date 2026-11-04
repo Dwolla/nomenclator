@@ -25,30 +25,32 @@ private[nomenclator] object DefinitionLookups:
   /** A lookup that didn't get a full turn, which says nothing about its task
     * definition.
     */
-  sealed abstract class NoFullTurn(message: String)
-      extends RuntimeException(message)
+  enum NoFullTurnError(message: String) extends RuntimeException(message):
 
-  /** A lookup that never started: the others held every slot until the
-    * deadline.
-    */
-  final case class NotStarted(deadline: FiniteDuration)
-      extends NoFullTurn(
-        s"the lookup did not start within $deadline: other lookups held every slot"
-      )
+    /** A lookup that never started: the others held every slot until the
+      * deadline.
+      */
+    case NotStarted(deadline: FiniteDuration)
+        extends NoFullTurnError(
+          s"the lookup did not start within $deadline: other lookups held every slot"
+        )
 
-  /** A lookup still running at the deadline, cancelled before its own timeout.
-    */
-  final case class CutOff(deadline: FiniteDuration)
-      extends NoFullTurn(
-        s"the lookup was still running at the $deadline deadline"
-      )
+    /** A lookup still running at the deadline, cancelled before its own
+      * timeout.
+      */
+    case CutOff(deadline: FiniteDuration)
+        extends NoFullTurnError(
+          s"the lookup was still running at the $deadline deadline"
+        )
+  end NoFullTurnError
 
   /** Runs `lookup` for each ref, up to four at a time, each bounded by
     * `lookupTimeout`, and all of them by [[deadline]]. A lookup still running
-    * at the deadline is cancelled and fails with [[CutOff]], and one not yet
-    * started fails with [[NotStarted]]. Refs in `failedBefore` are started
-    * last, in its order, so lookups that keep hanging can't hold every slot
-    * until the deadline and starve the others. Results are in `refs`' order.
+    * at the deadline is cancelled and fails with [[NoFullTurnError.CutOff]],
+    * and one not yet started fails with [[NoFullTurnError.NotStarted]]. Refs in
+    * `failedBefore` are started last, in its order, so lookups that keep
+    * hanging can't hold every slot until the deadline and starve the others.
+    * Results are in `refs`' order.
     */
   def within[F[_]: Temporal, A]
     (refs: List[TaskDefinitionRef], lookupTimeout: FiniteDuration, failedBefore: List[TaskDefinitionRef])
@@ -76,7 +78,8 @@ private[nomenclator] object DefinitionLookups:
     yield refs.map(ref =>
       ref -> results.getOrElse(
         ref,
-        (if (begun(ref)) CutOff(deadline) else NotStarted(deadline)).asLeft[A]
+        (if (begun(ref)) NoFullTurnError.CutOff(deadline)
+         else NoFullTurnError.NotStarted(deadline)).asLeft[A]
       )
     )
     end for
@@ -94,10 +97,10 @@ private[nomenclator] object DefinitionLookups:
   ): List[TaskDefinitionRef] =
     val noFullTurn = results
       .collect:
-        case (ref, Left(_: NoFullTurn)) =>
+        case (ref, Left(_: NoFullTurnError)) =>
           ref
       .toSet
     val failedNow = results.collect:
-      case (ref, Left(e)) if !e.isInstanceOf[NoFullTurn] => ref
+      case (ref, Left(e)) if !e.isInstanceOf[NoFullTurnError] => ref
     failedBefore.filter(noFullTurn) ++ failedNow
 end DefinitionLookups

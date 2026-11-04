@@ -32,12 +32,14 @@ object Http4sConsulAgent:
           if (response.status.isSuccess) read(response)
           else
             response.bodyText.compile.string.flatMap: body =>
-              ConsulAgentError(
-                req.method.name,
-                req.uri.path.renderString,
-                response.status.code,
-                excerpt(body)
-              ).raiseError[F, A]
+              ConsulAgentError
+                .UnexpectedStatus(
+                  req.method.name,
+                  req.uri.path.renderString,
+                  response.status.code,
+                  excerpt(body)
+                )
+                .raiseError[F, A]
 
     // The token is never in what Consul says back, but redacting it makes
     // that a guarantee instead of an assumption.
@@ -56,7 +58,8 @@ object Http4sConsulAgent:
       send(req): response =>
         if (filtered(response))
           response.body.compile.drain >>
-            ConsulResultsFilteredError(req.uri.path.renderString)
+            ConsulAgentError
+              .ResultsFiltered(req.uri.path.renderString)
               .raiseError[F, A]
         else response.as[A](using summon, RedactedJson.decoder[F, A])
 
@@ -92,5 +95,5 @@ object Http4sConsulAgent:
       send(request(Method.PUT, "service", "deregister", id.value))(
         _.body.compile.drain
       ).recover:
-        case ConsulAgentError(_, _, 404, _) => ()
+        case ConsulAgentError.UnexpectedStatus(_, _, 404, _) => ()
 end Http4sConsulAgent

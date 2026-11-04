@@ -366,7 +366,7 @@ class ReconcilerSuite extends CatsEffectSuite:
       assertEquals(emitted.count(_.isRight), 25)
       assertEquals(
         emitted.lastOption,
-        Some(Left(ReconcileFailedTooLong(2.minutes)))
+        Some(Left(ReconcileError.FailedTooLong(2.minutes)))
       )
 
   test("a successful pass restarts the failure clock"):
@@ -391,7 +391,7 @@ class ReconcilerSuite extends CatsEffectSuite:
     yield (result, end - start)
 
     underFixedSeed(program).map: (result, elapsed) =>
-      assertEquals(result, Left(ReconcileFailedTooLong(2.minutes)))
+      assertEquals(result, Left(ReconcileError.FailedTooLong(2.minutes)))
       assertEquals(elapsed, 3.minutes + 30.seconds)
 
   test(
@@ -735,7 +735,9 @@ class ReconcilerSuite extends CatsEffectSuite:
     val program = for
       w <- world(List(foo), Map(fooRef -> plain))
       _ <- w.consul.failState(
-        ConsulAgentError("GET", "/v1/agent/services", 500, "down").some
+        ConsulAgentError
+          .UnexpectedStatus("GET", "/v1/agent/services", 500, "down")
+          .some
       )
       reports <- passes(w, 4)(i => w.consul.failState(None).whenA(i == 2))
       writes <- w.consul.writes
@@ -812,11 +814,13 @@ class ReconcilerSuite extends CatsEffectSuite:
         emitted.collect:
           case Right(r) => (r.duration, r.outcome)
         ,
-        List.fill(4)((passTimeout, Left(PassTimedOut(passTimeout))))
+        List.fill(4)(
+          (passTimeout, Left(ReconcileError.PassTimedOut(passTimeout)))
+        )
       )
       assertEquals(
         emitted.lastOption,
-        Some(Left(ReconcileFailedTooLong(2.minutes)))
+        Some(Left(ReconcileError.FailedTooLong(2.minutes)))
       )
       assertEquals(elapsed, 2.minutes)
       assertEquals(writes, Vector.empty)
@@ -838,7 +842,7 @@ class ReconcilerSuite extends CatsEffectSuite:
     underFixedSeed(program).map: (reports, writes, agent, logged) =>
       assertEquals(
         reports.map(_.outcome.map(_.plan.register.map(_.id))),
-        List(Left(PassTimedOut(passTimeout)), Right(List(barId)))
+        List(Left(ReconcileError.PassTimedOut(passTimeout)), Right(List(barId)))
       )
       assertEquals(
         described(writes),

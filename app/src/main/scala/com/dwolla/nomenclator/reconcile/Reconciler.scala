@@ -24,14 +24,14 @@ object Reconciler:
   /** Runs a pass every `interval`, starting immediately, and emits a report of
     * each, failed passes included. A pass that can't read the ECS agent or the
     * Consul agent writes nothing. A pass still running after `passTimeout` is
-    * abandoned and fails with [[PassTimedOut]]; the writes it made stay made,
-    * and the next pass's plan retries the rest. Each task definition lookup
-    * that takes longer than `lookupTimeout`, or is unfinished at the lookup
-    * phase's deadline, fails, leaving its tasks awaiting their definition, so a
-    * hung ECS API can't hold up the rest of the host. The stream fails with
-    * [[ReconcileFailedTooLong]] once `policy`'s limit passes without a
-    * successful pass; otherwise it runs until it is interrupted, and never
-    * deregisters anything on the way out.
+    * abandoned and fails with [[ReconcileError.PassTimedOut]]; the writes it
+    * made stay made, and the next pass's plan retries the rest. Each task
+    * definition lookup that takes longer than `lookupTimeout`, or is unfinished
+    * at the lookup phase's deadline, fails, leaving its tasks awaiting their
+    * definition, so a hung ECS API can't hold up the rest of the host. The
+    * stream fails with [[ReconcileError.FailedTooLong]] once `policy`'s limit
+    * passes without a successful pass; otherwise it runs until it is
+    * interrupted, and never deregisters anything on the way out.
     */
   def stream[F[_]: Temporal: StructuredLogger: Tracer](
                                                         mode: Mode,
@@ -76,7 +76,9 @@ object Reconciler:
                     pass.run
                       .timeoutTo(
                         passTimeout,
-                        PassTimedOut(passTimeout).raiseError[F, PassOutcome]
+                        ReconcileError
+                          .PassTimedOut(passTimeout)
+                          .raiseError[F, PassOutcome]
                       )
                       .attempt
                       .flatTap(changeLog.passFinished)
@@ -91,7 +93,7 @@ object Reconciler:
             case (_, (report, failingFor)) =>
               Stream.emit(report) ++ (
                 if (policy.exceededBy(failingFor))
-                  Stream.raiseError[F](ReconcileFailedTooLong(policy.limit))
+                  Stream.raiseError[F](ReconcileError.FailedTooLong(policy.limit))
                 else Stream.empty
               )
 

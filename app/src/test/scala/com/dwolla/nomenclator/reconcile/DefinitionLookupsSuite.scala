@@ -22,11 +22,11 @@ class DefinitionLookupsSuite extends CatsEffectSuite:
   /** How a lookup ended, as `within` reports it.
     */
   private def ending(result: Either[Throwable, ?]): String = result match
-    case Right(_)                     => "answered"
-    case Left(_: TimeoutException)    => "timed out"
-    case Left(CutOff(`deadline`))     => "cut off"
-    case Left(NotStarted(`deadline`)) => "not started"
-    case Left(e)                      => s"failed: $e"
+    case Right(_)                                     => "answered"
+    case Left(_: TimeoutException)                    => "timed out"
+    case Left(NoFullTurnError.CutOff(`deadline`))     => "cut off"
+    case Left(NoFullTurnError.NotStarted(`deadline`)) => "not started"
+    case Left(e)                                      => s"failed: $e"
 
   test(
     "the deadline gives two rounds of lookups their own timeout, and half a round more"
@@ -57,9 +57,9 @@ class DefinitionLookupsSuite extends CatsEffectSuite:
     "a lookup that didn't start, or was cut off by the deadline, keeps its turn"
   ):
     val results = List(
-      a -> Left(NotStarted(deadline)),
-      b -> Left(CutOff(deadline)),
-      c -> Left(CutOff(deadline))
+      a -> Left(NoFullTurnError.NotStarted(deadline)),
+      b -> Left(NoFullTurnError.CutOff(deadline)),
+      c -> Left(NoFullTurnError.CutOff(deadline))
     )
     assertEquals(failed(List(a, b), results), List(a, b))
 
@@ -68,12 +68,13 @@ class DefinitionLookupsSuite extends CatsEffectSuite:
   ):
     val results = List(
       a -> Left(new TimeoutException("5 seconds")),
-      b -> Left(NotStarted(deadline)),
+      b -> Left(NoFullTurnError.NotStarted(deadline)),
       c -> Left(new RuntimeException("boom"))
     )
     assertEquals(failed(List(a, b), results), List(b, a, c))
 
   test("a lookup that succeeds leaves the queue"):
-    val results = List(a -> Right(()), b -> Left(CutOff(deadline)))
+    val results =
+      List(a -> Right(()), b -> Left(NoFullTurnError.CutOff(deadline)))
     assertEquals(failed(List(a, b), results), List(b))
 end DefinitionLookupsSuite

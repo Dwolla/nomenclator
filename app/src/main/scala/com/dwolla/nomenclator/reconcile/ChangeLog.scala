@@ -82,9 +82,10 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
     */
   def passFinished(result: Either[Throwable, ?]): F[Unit] =
     val timing = result match
-      case Left(timedOut: PassTimedOut) => List(() -> timedOut.asLeft)
-      case Left(_)                      => Nil
-      case Right(_)                     => List(() -> ().asRight)
+      case Left(timedOut: ReconcileError.PassTimedOut) =>
+        List(() -> timedOut.asLeft)
+      case Left(_)  => Nil
+      case Right(_) => List(() -> ().asRight)
     failures(
       timing,
       { case Entry.PassTimingOut => () },
@@ -110,8 +111,9 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
     */
   def definitionLookups(results: List[(TaskDefinitionRef, Either[Throwable, ?])]): F[Unit] =
     val noFullTurn = results.collect:
-      case (ref, Left(e: DefinitionLookups.NoFullTurn)) => ref -> e
-    val fullTurns = results.filterNot((_, result) => result.left.exists(_.isInstanceOf[DefinitionLookups.NoFullTurn]))
+      case (ref, Left(e: DefinitionLookups.NoFullTurnError)) => ref -> e
+    val fullTurns =
+      results.filterNot((_, result) => result.left.exists(_.isInstanceOf[DefinitionLookups.NoFullTurnError]))
     failures(
       fullTurns.map((ref, result) => ref -> result.void),
       { case Entry.DefinitionFailing(ref) => ref },
@@ -137,14 +139,14 @@ final class ChangeLog[F[_]: Monad: StructuredLogger] private (logged: Ref[F, Set
       )
   end definitionLookups
 
-  private def logNoFullTurn(ref: TaskDefinitionRef, noFullTurn: DefinitionLookups.NoFullTurn): F[Unit] =
+  private def logNoFullTurn(ref: TaskDefinitionRef, noFullTurn: DefinitionLookups.NoFullTurnError): F[Unit] =
     val context = Map("task_definition" -> ref.value)
     noFullTurn match
-      case DefinitionLookups.NotStarted(_) =>
+      case DefinitionLookups.NoFullTurnError.NotStarted(_) =>
         logger.info(context)(
           "Task definition lookup waited behind other lookups until the lookup phase's deadline; its tasks wait, and their existing registrations are kept"
         )
-      case DefinitionLookups.CutOff(_) =>
+      case DefinitionLookups.NoFullTurnError.CutOff(_) =>
         logger.info(context)(
           "Task definition lookup was cut off at the lookup phase's deadline, before its own timeout; its tasks wait, and their existing registrations are kept"
         )

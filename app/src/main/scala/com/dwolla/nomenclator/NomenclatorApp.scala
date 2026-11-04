@@ -251,7 +251,7 @@ object NomenclatorApp:
       .drain
       .as(ExitCode.Success)
       .recoverWith:
-        case e: ReconcileFailedTooLong =>
+        case e: ReconcileError.FailedTooLong =>
           StructuredLogger[F].error(e.getMessage).as(ExitCode.Error)
       .onCancel(
         StructuredLogger[F].info(

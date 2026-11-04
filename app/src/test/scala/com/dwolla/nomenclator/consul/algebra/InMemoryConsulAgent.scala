@@ -30,7 +30,8 @@ final class InMemoryConsulAgent private (
       hangingRegistrations.get.flatMap(hanging => IO.never.whenA(hanging.contains(r.id))) >>
       failingRegistrations.get.flatMap: failing =>
         if (failing.contains(r.id))
-          ConsulAgentError("PUT", "/v1/agent/service/register", 500, "boom")
+          ConsulAgentError
+            .UnexpectedStatus("PUT", "/v1/agent/service/register", 500, "boom")
             .raiseError[IO, Unit]
         else agent.update(registered(_, r))
 
@@ -38,12 +39,14 @@ final class InMemoryConsulAgent private (
     attempted.update(_ :+ Attempt.Deregister(id)) >>
       failingDeregistrations.get.flatMap: failing =>
         if (failing.contains(id))
-          ConsulAgentError(
-            "PUT",
-            s"/v1/agent/service/deregister/${id.value}",
-            500,
-            "boom"
-          ).raiseError[IO, Unit]
+          ConsulAgentError
+            .UnexpectedStatus(
+              "PUT",
+              s"/v1/agent/service/deregister/${id.value}",
+              500,
+              "boom"
+            )
+            .raiseError[IO, Unit]
         else
           agent.update(s =>
             AgentState(

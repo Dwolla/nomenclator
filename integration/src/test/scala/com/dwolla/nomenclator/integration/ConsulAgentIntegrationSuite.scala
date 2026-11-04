@@ -291,7 +291,7 @@ class ConsulAgentIntegrationSuite extends CatsEffectSuite:
         limited <- readOnlyFooToken(version, r)
         read <- Http4sConsulAgent(r.client, r.base, Some(limited)).state.attempt
       yield read match
-        case Left(e: ConsulResultsFilteredError) =>
+        case Left(e: ConsulAgentError.ResultsFiltered) =>
           assert(version.reportsAclFiltering, e.getMessage)
           assertEquals(e.path, "/v1/agent/services")
         case Right(state) =>
@@ -306,7 +306,7 @@ class ConsulAgentIntegrationSuite extends CatsEffectSuite:
         .register(registration("h:web:80"))
         .attempt
         .map:
-          case Left(e: ConsulAgentError) =>
+          case Left(e: ConsulAgentError.UnexpectedStatus) =>
             assertEquals(e.status, 403)
             assertEquals(e.method, "PUT")
             assertEquals(e.path, "/v1/agent/service/register")
@@ -319,7 +319,7 @@ class ConsulAgentIntegrationSuite extends CatsEffectSuite:
         .register(registration("h:web:80"))
         .attempt
         .map:
-          case Left(e: ConsulAgentError) =>
+          case Left(e: ConsulAgentError.UnexpectedStatus) =>
             assertEquals(e.status, 403)
             assert(!e.getMessage.contains(wrongToken), e.getMessage)
             assert(!e.bodyExcerpt.contains(wrongToken), e.bodyExcerpt)

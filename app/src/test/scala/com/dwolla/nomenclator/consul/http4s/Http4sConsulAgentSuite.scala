@@ -37,12 +37,13 @@ class Http4sConsulAgentSuite extends CatsEffectSuite:
           .deregister(id)
           .attempt
           .map:
-            case Left(e: ConsulAgentError) =>
+            case Left(e: ConsulAgentError.UnexpectedStatus) =>
               assertEquals(e.status, 403)
               assert(!e.getMessage.contains(token), e.getMessage)
               assert(!e.bodyExcerpt.contains(token), e.bodyExcerpt)
               assert(e.bodyExcerpt.contains("denied for token"))
-            case other => fail(s"expected a ConsulAgentError, got $other")
+            case other =>
+              fail(s"expected a ConsulAgentError.UnexpectedStatus, got $other")
 
   test("the token header is sent when a token is configured"):
     stubClient(Response[IO](Status.Ok)).flatMap:
@@ -92,11 +93,11 @@ class Http4sConsulAgentSuite extends CatsEffectSuite:
     ).flatMap:
       case (_, client) =>
         Http4sConsulAgent(client, base, Some(token)).state.attempt.map:
-          case Left(e: ConsulResultsFilteredError) =>
+          case Left(e: ConsulAgentError.ResultsFiltered) =>
             assertEquals(e.path, "/v1/agent/services")
             assert(!e.getMessage.contains(token), e.getMessage)
           case other =>
-            fail(s"expected a ConsulResultsFilteredError, got $other")
+            fail(s"expected a ConsulAgentError.ResultsFiltered, got $other")
 
   test("a read whose results ACLs did not filter succeeds"):
     stubClient(
