@@ -177,6 +177,8 @@ Pull requests and branch pushes build and test the image and publish nothing. Th
 only.
 
 Deployments pin the index digest (`dwolla/nomenclator@sha256:...`, shown in the publish job's summary), not the tag.
+[docs/releasing.md](docs/releasing.md) describes how to make a release, how to choose its version, and what to do when
+one fails.
 
 ### Building and checking it
 
