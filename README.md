@@ -169,7 +169,9 @@ that warning and fails on any other output that isn't JSON.
 The image is published as `dwolla/nomenclator` on Docker Hub: a multi-architecture index (`linux/amd64` and
 `linux/arm64`) tagged with the version only (there is no `latest` tag). Pushing a `v<version>` git tag runs
 `.github/workflows/image.yml`, which builds each architecture natively, smoke-tests it, and publishes
-`dwolla/nomenclator:<version>`. A published version is never overwritten: the workflow fails if the tag already exists.
+`dwolla/nomenclator:<version>`. Only a tag on a commit on `main` publishes, so only code that reached `main` through a
+reviewed pull request is released; the workflow refuses a tag on any other commit. A published version is never
+overwritten: the workflow fails if the tag already exists.
 Pull requests and branch pushes build and test the image and publish nothing. The workflow needs the repository secrets
 `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`, a Docker Hub access token with read and write access to `dwolla/nomenclator`
 only.

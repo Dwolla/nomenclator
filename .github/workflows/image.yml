@@ -1,5 +1,5 @@
 # Builds the native-image container for each architecture on a runner of that architecture, smoke-tests it under
-# production's hardening, and, for a v<version> tag only, publishes the multi-arch index
+# production's hardening, and, for a v<version> tag on a commit on main only, publishes the multi-arch index
 # docker.io/dwolla/nomenclator:<version>.
 # Pull requests and branch pushes build and test both architectures and push nothing.
 # Each architecture's job runs sbt-native-packager (sbt app/Docker/stage), which builds the binary in the toolchain
@@ -46,6 +46,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      # Anyone who can push can create a v<version> tag, on any commit. Only commits on main have been through a
+      # reviewed pull request (main's ruleset), so a tag on any other commit is refused before anything is built.
+      - name: Fail unless the tagged commit is on main
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "::error::$GITHUB_REF_NAME points at $GITHUB_SHA, which isn't on main; refusing to publish it."
+            exit 1
+          fi
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
