@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+# Regenerates the GraalVM reachability metadata in
+# app/src/main/resources/META-INF/native-image/com.dwolla/nomenclator/generated/ from one scripted run of the
+# agent, under the native-image tracing agent, inside docker/toolchain's image (the image build's toolchain, built by
+# build.sbt's toolchainImage, so its digest is pinned in one place).
+#
+# Run it after a dependency upgrade, or after any change to how Nomenclator calls HTTP, JSON, AWS, or telemetry.
+# The binary only has the reflection, resources, and serialization the run exercised, so the run covers the
+# error paths too:
+#   1. three passes (`reconcile` spans, failed or not) against a healthy Consul agent;
+#   2. Consul stopped, until a pass fails to read it;
+#   3. Consul started again, until the pass recovers;
+#   4. a task definition the fake AWS answers with an error (the fixture's baz-api), which every pass attempts;
+#   5. SIGTERM (docker stop).
+# Passes are counted from the `reconcile` spans (one per pass, including failed ones) reaching a real OpenTelemetry
+# Collector, since Nomenclator logs nothing for a pass that changes nothing. The other steps are read from
+# Nomenclator's JSON logs.
+#
+# Needs Docker with buildx, host networking (Docker Desktop 4.34 or later: Settings, Resources, Network), sbt, nc,
+# and java on the PATH. Full output goes to target/native-image-metadata.log; its path is printed if the run fails.
+set -euo pipefail
+
+usage() {
+  cat <<USAGE
+Usage: scripts/native-image-metadata
+
+Regenerates the native-image reachability metadata from one scripted agent run. Replaces the committed
+generated/ directory only if the whole scenario succeeded.
+
+  -h, --help    show this help
+USAGE
+}
+
+case "${1:-}" in
+  "") ;;
+  -h|--help) usage; exit 0 ;;
+  *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
+esac
+
+cd "$(dirname "$0")/.."
+root="$PWD"
+mkdir -p target
+log="target/native-image-metadata.log"
+generated="app/src/main/resources/META-INF/native-image/com.dwolla/nomenclator/generated"
+staging="$root/target/native-image-metadata"
+
+consul_image="$(<integration/src/test/resources/consul.image)" # shared with ConsulVersions.current
+collector_image="$(<integration/src/test/resources/otel-collector.image)" # shared with ImageSmokeSuite
+suffix="$$"
+consul="nomenclator-metadata-consul-$suffix"
+collector="nomenclator-metadata-collector-$suffix"
+agent="nomenclator-metadata-agent-$suffix"
+fakes_pid=""
+
+fail() {
+  echo "native-image-metadata FAILED: $1; full log: $root/$log" >&2
+  exit 1
+}
+
+note() { echo "$*" | tee -a "$log"; }
+
+# On any failure, keeps the agent's and collector's output in the log before the containers go.
+cleanup() {
+  local status=$?
+  if [[ $status -ne 0 ]]; then
+    {
+      echo "== agent log"; docker logs "$agent" 2>&1
+      echo "== collector log"; docker logs "$collector" 2>&1
+    } >> "$log" || true
+  fi
+  [[ -z "$fakes_pid" ]] || kill "$fakes_pid" 2>/dev/null || true
+  docker rm -f "$consul" "$collector" "$agent" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM
+
+started=$SECONDS
+: > "$log"
+
+# free_port [<port to avoid>]: a random loopback port that nothing is listening on. Chosen here rather than left to
+# Docker because Consul is stopped and started again during the run, and a port Docker assigned could change when it
+# restarts. It is chosen from 20000 to 32767, below the ephemeral ranges (macOS's from 49152, Docker Desktop's VM's
+# from 55000, Linux's default from 32768), so no outgoing connection can take it before Docker binds it.
+free_port() {
+  local port
+  while :; do
+    port=$((RANDOM % 12768 + 20000))
+    [[ "$port" != "${1:-}" ]] || continue
+    nc -z 127.0.0.1 "$port" 2>/dev/null || { echo "$port"; return; }
+  done
+}
+
+# wait_until <description> <seconds> <command...>: polls once a second, and fails if the command never succeeds
+# or the agent container exits first.
+wait_until() {
+  local description="$1" seconds="$2"; shift 2
+  local i
+  for ((i = 0; i < seconds; i++)); do
+    "$@" && { note "ok: $description (${i}s)"; return; }
+    [[ "$(docker inspect -f '{{.State.Running}}' "$agent")" == "true" ]] \
+      || fail "the agent exited while waiting for: $description"
+    sleep 1
+  done
+  fail "timed out after ${seconds}s waiting for: $description"
+}
+
+# Each helper captures the container's log before searching it: grep -q exiting early would hand docker logs a
+# SIGPIPE, which pipefail turns into a failed match.
+matches() { # <container> <pattern>
+  local output
+  output="$(docker logs "$1" 2>&1)" || true
+  grep -c -- "$2" <<<"$output" || true
+}
+agent_matches() { matches "$agent" "$1"; }
+agent_logged_beyond() { [[ "$(agent_matches "$1")" -gt "$2" ]]; } # <pattern> <count before the step began>
+reconcile_spans() { matches "$collector" 'Name  *: reconcile$'; }
+spans_at_least() { [[ "$(reconcile_spans)" -ge "$1" ]]; }
+
+note "staging the application's jars, reading the classpath of the fakes, and building the toolchain image"
+# With -error, the only stdout lines are the printed values: the toolchain image's tag, then the fakes' classpath.
+sbt -batch -error app/Universal/stage 'print app/toolchainImage' \
+    'export integration/Test/fullClasspath' > "$log.sbt" 2>> "$log" \
+  || { cat "$log.sbt" >> "$log"; rm -f "$log.sbt"; fail "sbt"; }
+cat "$log.sbt" >> "$log"
+toolchain_image="$(tail -n 2 "$log.sbt" | head -n 1)"
+fakes_classpath="$(tail -n 1 "$log.sbt")"
+rm -f "$log.sbt"
+lib="$root/app/target/universal/stage/lib"
+[[ -d "$lib" ]] || fail "sbt did not stage the application's jars in $lib"
+
+consul_port="$(free_port)"
+collector_port="$(free_port "$consul_port")"
+note "starting Consul on 127.0.0.1:$consul_port and the collector on 127.0.0.1:$collector_port"
+docker run -d --name "$consul" -p "127.0.0.1:$consul_port:8500" "$consul_image" agent -dev -client 0.0.0.0 \
+  >> "$log" 2>&1 || fail "starting Consul"
+docker run -d --name "$collector" -p "127.0.0.1:$collector_port:4317" \
+  -v "$root/integration/src/test/resources/otel-collector.yaml:/etc/otelcol/config.yaml:ro" \
+  "$collector_image" --config /etc/otelcol/config.yaml >> "$log" 2>&1 || fail "starting the collector"
+
+note "starting the fake ECS agent and AWS"
+fakes_env="$root/target/native-image-metadata-fakes.env"
+java -cp "$fakes_classpath" com.dwolla.nomenclator.integration.SmokeEnvironment > "$fakes_env" 2>> "$log" &
+fakes_pid=$!
+for _ in $(seq 1 60); do
+  [[ "$(grep -c '^export ' "$fakes_env")" -eq 3 ]] && break
+  kill -0 "$fakes_pid" 2>/dev/null || fail "the fakes exited before printing their environment"
+  sleep 1
+done
+[[ "$(grep -c '^export ' "$fakes_env")" -eq 3 ]] || fail "the fakes did not print their environment"
+# shellcheck disable=SC1090
+source "$fakes_env"
+
+rm -rf "$staging"
+mkdir -p "$staging"
+chmod 777 "$staging" # the toolchain image's user is not the host's
+
+note "starting the agent run"
+# Host networking reaches the fakes (bound to the host's loopback) and the published Consul and collector ports.
+# preferIPv4Stack: on Docker Desktop, a JVM's default dual-stack socket gets "connection refused" from the host's
+# loopback ports through host networking, while an IPv4-only socket connects.
+docker run -d --name "$agent" --network host \
+  -v "$lib:/work/lib:ro" -v "$staging:/metadata" \
+  -e NOMENCLATOR_MODE=apply -e NOMENCLATOR_INTERVAL=2s -e NOMENCLATOR_HOSTNAME=metadata-host \
+  -e NOMENCLATOR_ECS_AGENT_URL -e AWS_CONTAINER_CREDENTIALS_FULL_URI -e AWS_ENDPOINT_URL_ECS \
+  -e "CONSUL_HTTP_ADDR=127.0.0.1:$consul_port" \
+  -e "OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:$collector_port" \
+  -e OTEL_BSP_SCHEDULE_DELAY=500 -e OTEL_METRIC_EXPORT_INTERVAL=2000 \
+  --entrypoint java "$toolchain_image" \
+  -Djava.net.preferIPv4Stack=true \
+  "-agentlib:native-image-agent=config-output-dir=/metadata" -cp "/work/lib/*" com.dwolla.nomenclator.Main Local \
+  >> "$log" 2>&1 || fail "starting the agent run"
+
+wait_until "3 passes reached the collector" 120 spans_at_least 3
+wait_until "a task definition lookup failed on an AWS error answer" 30 \
+  agent_logged_beyond 'Task definition lookup failed' 0
+
+# Each of these counts only log lines that appear after its step began.
+consul_failures="$(agent_matches 'Reading the Consul agent failed')"
+docker stop "$consul" >> "$log" 2>&1 || fail "docker stop of Consul"
+wait_until "a pass failed to read the stopped Consul agent" 60 \
+  agent_logged_beyond 'Reading the Consul agent failed' "$consul_failures"
+
+consul_recoveries="$(agent_matches 'Reading the Consul agent recovered')"
+docker start "$consul" >> "$log" 2>&1 || fail "docker start of Consul"
+wait_until "a pass read the restarted Consul agent again" 60 \
+  agent_logged_beyond 'Reading the Consul agent recovered' "$consul_recoveries"
+
+passes="$(reconcile_spans)"
+note "stopping the agent run with SIGTERM after $passes passes"
+docker stop -t 60 "$agent" >> "$log" 2>&1 || fail "docker stop"
+[[ "$(agent_matches 'Stopping as asked')" -gt 0 ]] || fail "Nomenclator did not log that it stopped as asked"
+
+[[ -s "$staging/reachability-metadata.json" ]] \
+  || fail "the agent wrote no reachability-metadata.json to $staging"
+
+rm -rf "$generated"
+mkdir -p "$generated"
+cp "$staging"/* "$generated"/
+note "wrote $generated: $(find "$generated" -type f -exec basename {} \; | tr '\n' ' ')"
+note "passes: $passes, elapsed: $((SECONDS - started)) s, log: $root/$log"

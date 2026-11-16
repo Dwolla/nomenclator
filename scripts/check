@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Canonical check: format checks, all tests, under fatal warnings.
+# Full sbt output goes to target/check.log; its path is printed if the check fails.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+mkdir -p target
+log="target/check.log"
+
+if sbt check 2>&1 | tee "$log"; then
+  echo "check passed"
+else
+  echo "check FAILED; full log: $PWD/$log" >&2
+  exit 1
+fi

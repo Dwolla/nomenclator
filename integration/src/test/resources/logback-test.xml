@@ -1,0 +1,6 @@
+<configuration>
+  <!-- Testcontainers logs its progress through SLF4J, which reaches the
+       application's Logback. The tests assert on what they need; the rest is
+       noise in the test output. -->
+  <root level="OFF"/>
+</configuration>

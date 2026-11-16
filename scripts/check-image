@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Runs the image smoke suite against an image: the container under production's hardening, against a real Consul
+# agent and OpenTelemetry Collector. If NOMENCLATOR_IMAGE names an image (CI sets it to the image it just built), that
+# image is tested; otherwise the image is built first for the local architecture (scripts/build-image).
+# Needs Docker with host networking (Docker Desktop 4.34 or later: Settings, Resources, Network) and, to build,
+# what scripts/build-image needs. Full output goes to target/check-image.log; its path is printed if the check fails.
+set -euo pipefail
+
+usage() {
+  cat <<USAGE
+Usage: scripts/check-image
+
+Runs ImageSmokeSuite against an image.
+
+  NOMENCLATOR_IMAGE   the image to test. If set, scripts/build-image is skipped. If unset, scripts/build-image builds
+                      nomenclator:local first and that is tested.
+
+  -h, --help          show this help
+USAGE
+}
+
+case "${1:-}" in
+  "") ;;
+  -h|--help) usage; exit 0 ;;
+  *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
+esac
+
+cd "$(dirname "$0")/.."
+mkdir -p target
+log="target/check-image.log"
+
+fail() {
+  echo "check-image FAILED: $1; full log: $PWD/$log" >&2
+  exit 1
+}
+
+: > "$log"
+if [[ -z "${NOMENCLATOR_IMAGE:-}" ]]; then
+  NOMENCLATOR_IMAGE="nomenclator:local"
+  scripts/build-image --tag "$NOMENCLATOR_IMAGE" 2>&1 | tee -a "$log" || fail "scripts/build-image"
+else
+  echo "testing the existing image $NOMENCLATOR_IMAGE; skipping scripts/build-image" | tee -a "$log"
+fi
+export NOMENCLATOR_IMAGE
+
+# Root owns everything in /app, so the runtime user can't rewrite its own binary. The image has no shell, so its
+# filesystem is listed from outside. GNU tar prints uid/gid as one field; bsdtar (macOS) prints the link count, uid,
+# and gid as three.
+cid="$(docker create "$NOMENCLATOR_IMAGE")" || fail "docker create $NOMENCLATOR_IMAGE"
+trap 'docker rm "$cid" >/dev/null' EXIT
+owners="$(docker export "$cid" | tar --numeric-owner -tvf - app \
+  | awk '{ print (($2 ~ /\//) ? $2 : $3 "/" $4), $NF }')" || fail "listing /app in $NOMENCLATOR_IMAGE"
+printf 'owners of /app in %s (uid/gid path):\n%s\n' "$NOMENCLATOR_IMAGE" "$owners" >> "$log"
+grep -qx '0/0 app/nomenclator' <<< "$owners" || fail "/app/nomenclator is not owned by 0:0"
+if grep -qv '^0/0 ' <<< "$owners"; then fail "something in /app is not owned by 0:0"; fi
+echo "/app is owned by 0:0"
+
+sbt -batch 'integration/testOnly com.dwolla.nomenclator.integration.ImageSmokeSuite' \
+  >> "$log" 2>&1 || fail "ImageSmokeSuite"
+
+# A skipped test would mean the suite never ran against the image.
+summary="$(grep -E 'Passed: Total' "$log" | tail -n 1 | sed 's/\x1b\[[0-9;]*m//g' || true)"
+[[ -n "$summary" ]] || fail "sbt printed no test summary"
+echo "$summary"
+[[ "$summary" == *"Failed 0, Errors 0"* && "$summary" != *"Skipped"* ]] \
+  || fail "the suite did not run every test"
+echo "check-image passed; log: $PWD/$log"

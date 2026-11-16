@@ -1,0 +1,108 @@
+{
+  "Tasks": [
+    {
+      "Arn": "arn:aws:ecs:us-east-1:123456789012:task/example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "DesiredStatus": "RUNNING",
+      "KnownStatus": "RUNNING",
+      "Family": "foo-service",
+      "Version": "3",
+      "Containers": [
+        {
+          "DockerId": "1111111111111111111111111111111111111111111111111111111111111111",
+          "DockerName": "ecs-foo-service-3-web-a1b2c3d4e5f6a7b8c9d0",
+          "Name": "web",
+          "Image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/foo-service:1.2.3",
+          "ImageID": "sha256:2ae34aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "CreatedAt": "2026-11-03T11:00:01.123456789Z",
+          "StartedAt": "2026-11-03T11:00:01.123456789Z",
+          "Ports": [
+            { "ContainerPort": 8080, "Protocol": "tcp", "HostPort": 32768 },
+            { "ContainerPort": 8080, "Protocol": "tcp", "HostPort": 32768 }
+          ]
+        }
+      ]
+    },
+    {
+      "Arn": "arn:aws:ecs:us-east-1:123456789012:task/example/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "DesiredStatus": "RUNNING",
+      "KnownStatus": "RUNNING",
+      "Family": "bar-worker",
+      "Version": "12",
+      "Containers": [
+        {
+          "DockerId": "2222222222222222222222222222222222222222222222222222222222222222",
+          "DockerName": "ecs-bar-worker-12-worker-0a1b2c3d4e5f6a7b8c9d",
+          "Name": "worker",
+          "Image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/bar-worker:4.5.6",
+          "ImageID": "sha256:2ae34bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "CreatedAt": "2026-11-03T12:00:02.123456789Z",
+          "StartedAt": "2026-11-03T12:00:02.123456789Z",
+          "Ports": [
+            { "ContainerPort": 9000, "Protocol": "tcp", "HostPort": 32770 },
+            { "ContainerPort": 9001, "Protocol": "udp", "HostPort": 32771 }
+          ]
+        },
+        {
+          "DockerId": "3333333333333333333333333333333333333333333333333333333333333333",
+          "DockerName": "ecs-bar-worker-12-sidecar-1a2b3c4d5e6f7a8b9c0d",
+          "Name": "sidecar",
+          "Image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/bar-sidecar:latest",
+          "ImageID": "sha256:2ae34ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "CreatedAt": "2026-11-03T13:00:03.123456789Z",
+          "StartedAt": "2026-11-03T13:00:03.123456789Z",
+          "Volumes": [
+            { "DockerName": "ecs-bar-worker-12-data-volume", "Source": "/var/lib/ecs/data/bar-worker", "Destination": "/data" }
+          ]
+        }
+      ]
+    },
+    {
+      "Arn": "arn:aws:ecs:us-east-1:123456789012:task/example/cccccccccccccccccccccccccccccccc",
+      "DesiredStatus": "STOPPED",
+      "KnownStatus": "RUNNING",
+      "Family": "foo-service",
+      "Version": "2",
+      "Containers": [
+        {
+          "DockerId": "4444444444444444444444444444444444444444444444444444444444444444",
+          "DockerName": "/ecs-foo-service-2-web-b1c2d3e4f5a6b7c8d9e0",
+          "Name": "web",
+          "Image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/foo-service:1.2.2",
+          "ImageID": "sha256:2ae34dddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "CreatedAt": "2026-11-03T14:00:04.123456789Z",
+          "StartedAt": "2026-11-03T14:00:04.123456789Z",
+          "Ports": [
+            { "ContainerPort": 8080, "Protocol": "tcp", "HostPort": 32769 }
+          ]
+        }
+      ]
+    },
+    {
+      "Arn": "arn:aws:ecs:us-east-1:123456789012:task/example/dddddddddddddddddddddddddddddddd",
+      "DesiredStatus": "RUNNING",
+      "KnownStatus": "RUNNING",
+      "Family": "baz-api",
+      "Version": "7",
+      "Containers": [
+        {
+          "DockerId": "5555555555555555555555555555555555555555555555555555555555555555",
+          "DockerName": "ecs-baz-api-7-api-c1d2e3f4a5b6c7d8e9f0",
+          "Name": "api",
+          "Image": "123456789012.dkr.ecr.us-east-1.amazonaws.com/baz-api:7.0.0",
+          "ImageID": "sha256:2ae34eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "CreatedAt": "2026-11-03T15:00:05.123456789Z",
+          "StartedAt": "2026-11-03T15:00:05.123456789Z",
+          "Ports": [
+            { "ContainerPort": 8080, "Protocol": "tcp", "HostPort": 8080 }
+          ],
+          "Networks": [
+            {
+              "NetworkMode": "awsvpc",
+              "IPv4Addresses": ["10.0.1.5"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
